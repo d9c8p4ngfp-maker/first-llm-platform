@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  first-ai-service:
+    build: ./first-ai-service
+    container_name: first-ai-service
+    ports:
+      - "8000:8000"
+    environment:
+      LOG_LEVEL: ${AI_LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  gateway:
+    build: ./first-gateway
+    container_name: first-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/first_gateway?useSSL=false&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: gateway
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-changeme}
+      JWT_SECRET: ${JWT_SECRET:-changeme-in-production}
+      CHANNEL_KEY_SECRET: ${CHANNEL_KEY_SECRET:-changeme-in-production}
+      AI_SERVICE_BASE_URL: http://first-ai-service:8000
+    depends_on:
+      mysql:
+        condition: service_healthy
+      first-ai-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  mysql:
+    image: mysql:8.0
+    # 若 Docker Hub 拉取失败，可先执行:
+    # docker pull docker.m.daocloud.io/library/mysql:8.0
+    # docker tag docker.m.daocloud.io/library/mysql:8.0 mysql:8.0
+    container_name: first-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: first_gateway
+      MYSQL_USER: gateway
+      MYSQL_PASSWORD: ${DB_PASSWORD:-changeme}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-changeme}
+    volumes:
+      - D:/first/data/mysql:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=200
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped

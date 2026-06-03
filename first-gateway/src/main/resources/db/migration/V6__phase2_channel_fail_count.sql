@@ -1,0 +1,1 @@
+ALTER TABLE channel ADD COLUMN fail_count INT NOT NULL DEFAULT 0;

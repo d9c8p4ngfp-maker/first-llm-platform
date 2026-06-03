@@ -1,0 +1,26 @@
+import { writeFileSync } from 'node:fs';
+const lines = [
+'package com.first.gateway.service.profile;',
+'',
+'import com.fasterxml.jackson.core.type.TypeReference;',
+'import com.fasterxml.jackson.databind.ObjectMapper;',
+'import com.first.gateway.domain.entity.PipelineConfig;',
+'import com.first.gateway.domain.entity.UserMemory;',
+'import com.first.gateway.domain.entity.Channel;',
+'import com.first.gateway.relay.adapter.OpenAiAdapter;',
+'import com.first.gateway.relay.router.ChannelSelector;',
+'import com.first.gateway.service.pipeline.PipelineConfigService;',
+'import org.slf4j.Logger;',
+'import org.slf4j.LoggerFactory;',
+'import org.springframework.scheduling.annotation.Async;',
+'import org.springframework.stereotype.Service;',
+'',
+'import java.math.BigDecimal;',
+'import java.time.LocalDate;',
+'import java.util.Collections;',
+'import java.util.List;',
+'import java.util.Map;',
+'import java.util.regex.Matcher;',
+'import java.util.regex.Pattern;',
+];
+writeFileSync('D:/first/scripts/_mem-lines.json', JSON.stringify(lines));

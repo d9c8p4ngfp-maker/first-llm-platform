@@ -1,0 +1,9 @@
+{
+  "name": "First Gateway Console",
+  "short_name": "FG Console",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#171717",
+  "description": "First Gateway user console"
+}

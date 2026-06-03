@@ -1,0 +1,64 @@
+# Secrets - never commit
+.env
+.env.example
+.env.*.example
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+
+# Local docs
+GITHUB.md
+
+# Local data & runtime
+data/
+logs/
+*.log
+
+# Java / Maven
+first-gateway/target/
+first-gateway/logs/
+*.class
+*.jar
+!**/gradle-wrapper.jar
+
+# Node / frontend
+first-gateway-web/node_modules/
+first-gateway-web/dist/
+first-gateway-web/.vite/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# IDE & OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Build / misc
+backup/
+cursor-hoho-proxy/
+ai-service/
+temp-vite-register.js
+scripts/_utf8test.txt
+
+# Design / planning docs (local only)
+modules/
+phases/
+CHANGELOG.md
+PROJECT-DECISIONS.md
+/[0-9][0-9]-*.md
+/[0-9][0-9][a-z]*-*.md
+/*.txt
+/go*
+/llm*
+新建文本文档.md

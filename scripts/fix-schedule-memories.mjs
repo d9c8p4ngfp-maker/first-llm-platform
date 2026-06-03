@@ -1,0 +1,4 @@
+import { execFileSync } from "node:child_process"
+const sql = "UPDATE user_memory SET content='开会' WHERE id=2;\nUPDATE user_memory SET content='吃饭' WHERE id=3;\nUPDATE user_memory SET content='周末打球', schedule_date='2026-06-07', schedule_time='12:30' WHERE id=4;\nDELETE FROM user_memory WHERE id IN (5,6);\nSELECT id, content, schedule_date, schedule_time FROM user_memory WHERE user_id=23 AND category='SCHEDULE' ORDER BY schedule_date, schedule_time;\n"
+execFileSync("docker", ["exec", "-i", "first-mysql", "mysql", "-ugateway", "-pchangeme", "--default-character-set=utf8mb4", "first_gateway"], { input: sql, encoding: "utf8" })
+console.log("done")

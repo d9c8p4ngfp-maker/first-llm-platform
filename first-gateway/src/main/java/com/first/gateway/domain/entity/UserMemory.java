@@ -1,0 +1,22 @@
+package com.first.gateway.domain.entity;
+import jakarta.persistence.*; import lombok.Getter; import lombok.Setter; import java.math.BigDecimal; import java.time.Instant; import java.time.LocalDate;
+@Entity @Table(name = "user_memory") @Getter @Setter
+public class UserMemory {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Column(name = "user_id", nullable = false) private Long userId;
+    @Column(name = "tenant_id", nullable = false) private Long tenantId;
+    @Column(name = "conversation_id") private Long conversationId;
+    @Column(nullable = false, length = 20) private String source = "MANUAL";
+    @Column(nullable = false, length = 30) private String category;
+    @Column(nullable = false, length = 4000) private String content;
+    @Column(nullable = false) private Short importance = 3;
+    @Column(name = "schedule_date") private LocalDate scheduleDate;
+    @Column(name = "schedule_time", length = 10) private String scheduleTime;
+    @Column(name = "numeric_value") private BigDecimal numericValue;
+    @Column(nullable = false, length = 20) private String status = "ACTIVE";
+    @Column private Short reminded = 0;
+    @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;
+    @Column(name = "updated_at", nullable = false) private Instant updatedAt;
+    @PrePersist void onCreate() { Instant n = Instant.now(); createdAt = n; updatedAt = n; }
+    @PreUpdate void onUpdate() { updatedAt = Instant.now(); }
+}
