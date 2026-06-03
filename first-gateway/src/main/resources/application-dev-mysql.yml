@@ -1,8 +1,0 @@
-spring:
-  config:
-    import: optional:file:../.env
-  # Deprecated: dev profile now uses MySQL directly. Kept for backward-compatible scripts.
-  profiles:
-    group:
-      dev-mysql:
-        - dev

@@ -1,4 +1,4 @@
-# Secrets - never commit
+# Secrets
 .env
 .env.example
 .env.*.example
@@ -8,25 +8,27 @@
 *.key
 credentials.json
 
-# Local docs
-GITHUB.md
+# Local-only workspace (data, backups, clones, temp)
+_local/
 
-# Local data & runtime
-data/
-logs/
-*.log
+# Third-party skill packs / agent libraries
+vendor/
+
+# Design & planning docs (local reference, not product code)
+docs/
 
 # Java / Maven
-first-gateway/target/
-first-gateway/logs/
+apps/first-gateway/target/
+apps/first-gateway/logs/
 *.class
 *.jar
 !**/gradle-wrapper.jar
 
 # Node / frontend
-first-gateway-web/node_modules/
-first-gateway-web/dist/
-first-gateway-web/.vite/
+node_modules/
+dist/
+apps/first-gateway-web/.vite/
+*.tsbuildinfo
 
 # Python
 __pycache__/
@@ -44,21 +46,6 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Build / misc
-backup/
-cursor-hoho-proxy/
-ai-service/
-temp-vite-register.js
-scripts/_utf8test.txt
-
-# Design / planning docs (local only)
-modules/
-phases/
-CHANGELOG.md
-PROJECT-DECISIONS.md
-/[0-9][0-9]-*.md
-/[0-9][0-9][a-z]*-*.md
-/*.txt
-/go*
-/llm*
-新建文本文档.md
+# Tooling temp
+tooling/scripts/_utf8test.txt
+tooling/scripts/_mem-lines.json
