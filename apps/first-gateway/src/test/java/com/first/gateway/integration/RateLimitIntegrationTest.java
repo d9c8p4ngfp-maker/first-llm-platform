@@ -1,5 +1,6 @@
 package com.first.gateway.integration;
 
+import com.first.gateway.support.RedisIntegrationSupport;
 import com.first.gateway.domain.entity.ApiKey;
 import com.first.gateway.infra.error.RateLimitExceededException;
 import com.first.gateway.service.auth.ConcurrencyLimiter;
@@ -17,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @SpringBootTest
 @ActiveProfiles("dev")
 @Transactional
-class RateLimitIntegrationTest {
+class RateLimitIntegrationTest extends RedisIntegrationSupport {
 
     @Autowired
     private MemoryApiKeyRateLimiter apiKeyRateLimiter;

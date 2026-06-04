@@ -1,5 +1,6 @@
 package com.first.gateway.integration;
 
+import com.first.gateway.support.RedisIntegrationSupport;
 import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.domain.entity.Quota;
 import com.first.gateway.domain.entity.RedemptionCode;
@@ -29,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest
 @ActiveProfiles("dev")
 @Transactional
-class MultiUserIsolationIntegrationTest {
+class MultiUserIsolationIntegrationTest extends RedisIntegrationSupport {
 
     @Autowired
     private UserService userService;

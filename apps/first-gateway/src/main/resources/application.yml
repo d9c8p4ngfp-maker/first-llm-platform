@@ -9,9 +9,13 @@ spring:
     active: dev
   lifecycle:
     timeout-per-shutdown-phase: 60s
-  threads:
+  thread:
     virtual:
       enabled: true
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
   datasource:
     url: jdbc:mysql://localhost:3306/first_gateway?useSSL=false&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai
     username: ${DB_USERNAME:root}
@@ -33,15 +37,20 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
 
 ai-service:
   enabled: ${AI_SERVICE_ENABLED:true}
   chat: ${AI_SERVICE_CHAT:true}
   memory-extraction: ${AI_SERVICE_MEMORY_EXTRACTION:true}
   profile-synthesis: ${AI_SERVICE_PROFILE_SYNTHESIS:true}
-  rag: ${AI_SERVICE_RAG:false}
+  rag: ${AI_SERVICE_RAG:true}
   embedding-model: ${AI_SERVICE_EMBEDDING_MODEL:text-embedding-3-small}
   base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
+  internal-token: ${AI_SERVICE_INTERNAL_TOKEN:compose-internal-ai-token-32chars-min}
   connect-timeout-ms: 5000
   read-timeout-ms: 120000
   stream-read-timeout-ms: 300000
@@ -68,13 +77,15 @@ gateway:
     open-duration-seconds: 30
   crypto:
     channel-key-secret: ${CHANNEL_KEY_SECRET:must-change-in-production}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:*,http://127.0.0.1:*}
   trace:
     header-name: X-Request-Id
 
 auth:
   jwt:
     secret: ${JWT_SECRET:must-change-in-production-use-env-var-32b-min}
-    expire-hours: 24
+    expire-hours: ${JWT_EXPIRE_HOURS:2}
 
 management:
   endpoints:

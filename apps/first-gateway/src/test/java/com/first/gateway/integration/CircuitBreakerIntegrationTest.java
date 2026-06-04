@@ -1,5 +1,6 @@
 package com.first.gateway.integration;
 
+import com.first.gateway.support.RedisIntegrationSupport;
 import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.enums.ChannelStatus;
 import com.first.gateway.relay.router.ChannelCircuitBreaker;
@@ -17,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest
 @ActiveProfiles("dev")
 @Transactional
-class CircuitBreakerIntegrationTest {
+class CircuitBreakerIntegrationTest extends RedisIntegrationSupport {
 
     @Autowired
     private ChannelHealthTracker channelHealthTracker;

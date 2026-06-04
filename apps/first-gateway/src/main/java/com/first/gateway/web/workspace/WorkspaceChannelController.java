@@ -8,6 +8,8 @@ import com.first.gateway.web.admin.dto.ChannelRequest;
 import com.first.gateway.web.workspace.support.WorkspaceAccess;
 import com.first.gateway.web.workspace.support.WorkspaceRequest;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -39,14 +41,15 @@ public class WorkspaceChannelController {
     }
 
     @PostMapping
-    public Channel create(@RequestBody ChannelRequest body, HttpServletRequest request) {
+    public Channel create(@Validated(ChannelRequest.OnCreate.class) @RequestBody ChannelRequest body,
+                          HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return channelService.createFromRequestForUser(principal.tenantId(), principal.userId(), body);
     }
 
     @PutMapping("/{id}")
     public Channel update(@PathVariable Long id,
-                          @RequestBody ChannelRequest body,
+                          @Valid @RequestBody ChannelRequest body,
                           HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         channelService.requireOwnedByUser(id, principal.userId());

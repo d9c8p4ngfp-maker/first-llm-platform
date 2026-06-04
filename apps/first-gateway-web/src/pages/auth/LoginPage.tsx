@@ -57,20 +57,18 @@ export function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label>用户名</Label>
-              <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+              <Label htmlFor="username">用户名</Label>
+              <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
             </div>
             <div>
-              <Label>密码</Label>
-              <Input
-                type="password"
-                value={password}
+              <Label htmlFor="password">密码</Label>
+              <Input id="password" type="password" value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 required
               />
             </div>
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && <p className="text-sm text-[hsl(var(--destructive))]" role="alert">{error}</p>}
             <Button type="submit" className="w-full bg-brand text-[hsl(var(--brand-foreground))] hover:opacity-95" disabled={loading}>
               {loading ? '登录中...' : '登录'}
             </Button>

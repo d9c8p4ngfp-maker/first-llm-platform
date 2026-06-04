@@ -6,6 +6,7 @@ import com.first.gateway.domain.enums.ChannelStatus;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
+import com.first.gateway.infra.security.UpstreamUrlValidator;
 import com.first.gateway.repository.ChannelModelRepository;
 import com.first.gateway.repository.ChannelRepository;
 import com.first.gateway.web.admin.dto.ChannelRequest;
@@ -53,6 +54,16 @@ public class ChannelServiceImpl implements ChannelService {
     }
 
     @Override
+    public Channel requireInTenant(Long id, Long tenantId) {
+        Channel channel = channelRepository.findById(id)
+            .orElseThrow(() -> new GatewayException(GatewayError.INVALID_REQUEST, "channel not found"));
+        if (channel.getDeleted() != 0 || !tenantId.equals(channel.getTenantId())) {
+            throw new GatewayException(GatewayError.ACCESS_DENIED);
+        }
+        return channel;
+    }
+
+    @Override
     @Transactional
     public Channel save(Channel channel) {
         return channelRepository.save(channel);
@@ -60,7 +71,7 @@ public class ChannelServiceImpl implements ChannelService {
 
     @Override
     @Transactional
-    public Channel createFromRequest(ChannelRequest request) {
+    public Channel createFromRequest(ChannelRequest request, Long tenantId) {
         if (request.name() == null || request.name().isBlank()) {
             throw new GatewayException(GatewayError.INVALID_REQUEST, "name required");
         }
@@ -70,7 +81,9 @@ public class ChannelServiceImpl implements ChannelService {
         if (request.baseUrl() == null || request.baseUrl().isBlank()) {
             throw new GatewayException(GatewayError.INVALID_REQUEST, "baseUrl required");
         }
+        UpstreamUrlValidator.validate(request.baseUrl());
         Channel channel = new Channel();
+        channel.setTenantId(tenantId);
         channel.setName(request.name());
         channel.setType(request.type() != null ? request.type() : "OPENAI");
         channel.setProvider(request.provider());
@@ -89,8 +102,7 @@ public class ChannelServiceImpl implements ChannelService {
     @Override
     @Transactional
     public Channel createFromRequestForUser(Long tenantId, Long userId, ChannelRequest request) {
-        Channel channel = createFromRequest(request);
-        channel.setTenantId(tenantId);
+        Channel channel = createFromRequest(request, tenantId);
         channel.setUserId(userId);
         return channelRepository.save(channel);
     }
@@ -120,6 +132,7 @@ public class ChannelServiceImpl implements ChannelService {
             existing.setProvider(channel.getProvider());
         }
         if (channel.getBaseUrl() != null) {
+            UpstreamUrlValidator.validate(channel.getBaseUrl());
             existing.setBaseUrl(channel.getBaseUrl());
         }
         if (channel.getApiKeyEncrypted() != null) {
@@ -161,6 +174,7 @@ public class ChannelServiceImpl implements ChannelService {
             existing.setProvider(request.provider());
         }
         if (request.baseUrl() != null) {
+            UpstreamUrlValidator.validate(request.baseUrl());
             existing.setBaseUrl(request.baseUrl());
         }
         if (request.apiKey() != null && !request.apiKey().isBlank()) {

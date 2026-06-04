@@ -1,11 +1,6 @@
-import json
-import re
-
 from app.models.profile import ProfileResult, ProfileSynthesizeRequest, ProfileSynthesizeResponse
 from app.prompts.synthesis import synthesis_prompt
-from app.services.llm_client import chat_completion
-
-_JSON_FENCE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE)
+from app.services.llm_client import invoke_chat
 
 
 def _format_memories(req: ProfileSynthesizeRequest) -> str:
@@ -15,16 +10,28 @@ def _format_memories(req: ProfileSynthesizeRequest) -> str:
     return "\n".join(lines) if lines else "No memories"
 
 
-def _normalize_json(text: str) -> str:
-    trimmed = (text or "").strip()
-    m = _JSON_FENCE.search(trimmed)
-    if m:
-        trimmed = m.group(1).strip()
-    start = trimmed.find("{")
-    end = trimmed.rfind("}")
-    if start >= 0 and end > start:
-        return trimmed[start : end + 1]
-    return trimmed
+def _parse_profile(raw: str, current) -> dict:
+    """Parse profile using LangChain JsonOutputParser with fallback."""
+    try:
+        from langchain_core.output_parsers import JsonOutputParser
+        parser = JsonOutputParser()
+        return parser.invoke(raw) or {}
+    except Exception:
+        import json
+        import re
+        trimmed = (raw or "").strip()
+        fence = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE)
+        m = fence.search(trimmed)
+        if m:
+            trimmed = m.group(1).strip()
+        start = trimmed.find("{")
+        end = trimmed.rfind("}")
+        if start >= 0 and end > start:
+            trimmed = trimmed[start : end + 1]
+        try:
+            return json.loads(trimmed)
+        except json.JSONDecodeError:
+            return {}
 
 
 def synthesize_profile(req: ProfileSynthesizeRequest) -> ProfileSynthesizeResponse:
@@ -43,7 +50,7 @@ def synthesize_profile(req: ProfileSynthesizeRequest) -> ProfileSynthesizeRespon
     max_tokens = int(params.get("max_tokens", 3000))
     model = req.config.model or req.upstream.model
 
-    raw, usage = chat_completion(
+    data = invoke_chat(
         base_url=req.upstream.base_url,
         api_key=req.upstream.api_key,
         model=model,
@@ -54,13 +61,16 @@ def synthesize_profile(req: ProfileSynthesizeRequest) -> ProfileSynthesizeRespon
         temperature=temperature,
         max_tokens=max_tokens,
     )
+
+    usage = data.get("usage") if data else None
     content = ""
-    if raw:
-        choices = raw.get("choices") or []
+    if data:
+        choices = data.get("choices") or []
         if choices:
             msg = choices[0].get("message") or {}
             content = (msg.get("content") or "").strip()
-    parsed = json.loads(_normalize_json(content))
+
+    parsed = _parse_profile(content, current)
     profile = ProfileResult(
         ai_summary=str(parsed.get("ai_summary") or current.ai_summary or ""),
         ai_tags=parsed.get("ai_tags") or current.ai_tags or [],

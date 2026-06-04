@@ -20,13 +20,14 @@ export function TopTabs() {
   }
 
   return (
-    <nav className="hidden items-center gap-0.5 border-b border-[hsl(var(--border))] px-4 md:flex md:px-6">
+    <nav aria-label="主导航" className="hidden items-center gap-0.5 border-b border-[hsl(var(--border))] px-4 md:flex md:px-6">
       {tabs.map(({ to, label, icon: Icon }) => {
         const active = isActive(to)
         return (
           <Link
             key={to}
             to={to}
+            aria-current={active ? 'page' : undefined}
             className={cn(
               'relative flex items-center gap-2 rounded-t-lg px-4 py-3 text-sm font-medium transition-colors',
               active
@@ -46,6 +47,7 @@ export function TopTabs() {
         <ThemeToggle compact />
         <Link
           to="/settings"
+          aria-label="设置"
           className="rounded-md p-2 text-[hsl(var(--muted-foreground))] transition-colors hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))]"
         >
           <Settings className="h-4 w-4" />

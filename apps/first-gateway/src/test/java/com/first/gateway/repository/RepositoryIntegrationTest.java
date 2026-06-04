@@ -1,5 +1,6 @@
 package com.first.gateway.repository;
 
+import com.first.gateway.support.RedisIntegrationSupport;
 import com.first.gateway.domain.entity.BillingRecord;
 import com.first.gateway.domain.entity.Quota;
 import com.first.gateway.domain.entity.RedemptionCode;
@@ -26,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest
 @ActiveProfiles("dev")
 @Transactional
-class RepositoryIntegrationTest {
+class RepositoryIntegrationTest extends RedisIntegrationSupport {
 
     @Autowired
     private TenantRepository tenantRepository;

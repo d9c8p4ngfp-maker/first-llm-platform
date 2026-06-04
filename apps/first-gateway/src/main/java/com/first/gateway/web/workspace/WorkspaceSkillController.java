@@ -9,6 +9,7 @@ import com.first.gateway.web.workspace.dto.SkillRequest;
 import com.first.gateway.web.workspace.support.WorkspaceAccess;
 import com.first.gateway.web.workspace.support.WorkspaceRequest;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -37,7 +38,7 @@ public class WorkspaceSkillController {
     }
 
     @PostMapping
-    public Skill create(@RequestBody SkillRequest body, HttpServletRequest request) {
+    public Skill create(@Valid @RequestBody SkillRequest body, HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return skillService.create(principal.tenantId(), principal.userId(),
             body.name(), body.description(), body.suggestedModel());
@@ -45,7 +46,7 @@ public class WorkspaceSkillController {
 
     @PutMapping("/{id}")
     public Skill update(@PathVariable Long id,
-                        @RequestBody SkillRequest body,
+                        @Valid @RequestBody SkillRequest body,
                         HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return skillService.update(id, principal.userId(),
@@ -67,7 +68,7 @@ public class WorkspaceSkillController {
 
     @PostMapping("/{id}/bindings")
     public SkillBinding addBinding(@PathVariable Long id,
-                                  @RequestBody SkillBindingRequest body,
+                                  @Valid @RequestBody SkillBindingRequest body,
                                   HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return skillService.addBinding(id, principal.userId(), body.type(), body.bindingId());

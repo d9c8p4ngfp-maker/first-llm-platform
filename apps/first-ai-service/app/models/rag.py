@@ -19,6 +19,7 @@ class RagIndexRequest(BaseModel):
     knowledge_base_id: int
     content: str
     file_type: str = "TEXT"
+    file_path: str | None = None
     chunk_config: ChunkConfig = Field(default_factory=ChunkConfig)
     embedding_model: str = "text-embedding-3-small"
     upstream: UpstreamConfig

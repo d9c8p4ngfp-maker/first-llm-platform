@@ -41,7 +41,7 @@ public class AdminAuthService {
 
     @Transactional
     public LoginResult register(String username, String password, String email) {
-        if (!"true".equalsIgnoreCase(systemConfigService.getString("register_enabled", "true"))) {
+        if (!"true".equalsIgnoreCase(systemConfigService.getString("register_enabled", "false"))) {
             throw new GatewayException(GatewayError.ACCESS_DENIED, "registration is disabled");
         }
         userService.createUser(username, password, blankToNull(email), null);
@@ -49,7 +49,7 @@ public class AdminAuthService {
     }
 
     public boolean isRegisterEnabled() {
-        return "true".equalsIgnoreCase(systemConfigService.getString("register_enabled", "true"));
+        return "true".equalsIgnoreCase(systemConfigService.getString("register_enabled", "false"));
     }
 
     @Transactional
@@ -91,14 +91,18 @@ public class AdminAuthService {
         if (rawJwt == null || rawJwt.isBlank()) {
             throw new GatewayException(GatewayError.INVALID_JWT);
         }
+        if (jwtService.isBlacklisted(rawJwt)) {
+            throw new GatewayException(GatewayError.INVALID_JWT, "Token revoked");
+        }
         AdminPrincipal principal = jwtService.parseToken(rawJwt);
         User user = userRepository.findById(principal.userId())
             .filter(u -> u.getDeleted() == 0 && u.getStatus() == UserStatus.ACTIVE)
             .orElseThrow(() -> new GatewayException(GatewayError.INVALID_JWT));
-        userTenantRelRepository.findFirstByUserIdOrderByJoinedAtAsc(user.getId())
-            .filter(rel -> rel.getTenantId().equals(principal.tenantId()))
+        // S5: reload current role from DB to prevent permission staleness
+        UserTenantRel rel = userTenantRelRepository
+            .findByUserIdAndTenantId(user.getId(), principal.tenantId())
             .orElseThrow(() -> new GatewayException(GatewayError.INVALID_JWT));
-        return principal;
+        return new AdminPrincipal(user.getId(), rel.getTenantId(), user.getUsername(), rel.getRole());
     }
 
     public record LoginResult(String accessToken, long expiresIn, AdminPrincipal principal) {}

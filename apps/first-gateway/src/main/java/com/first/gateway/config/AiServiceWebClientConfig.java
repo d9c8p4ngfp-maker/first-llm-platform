@@ -20,6 +20,7 @@ public class AiServiceWebClientConfig {
 
         return WebClient.builder()
             .baseUrl(aiServiceProperties.getBaseUrl())
+            .defaultHeader("X-Internal-Token", aiServiceProperties.getInternalToken())
             .clientConnector(new ReactorClientHttpConnector(httpClient))
             .build();
     }

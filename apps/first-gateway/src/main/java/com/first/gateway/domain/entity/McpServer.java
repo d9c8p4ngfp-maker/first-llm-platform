@@ -1,4 +1,4 @@
-package com.first.gateway.domain.entity;
+﻿package com.first.gateway.domain.entity;
 import jakarta.persistence.*; import lombok.Getter; import lombok.Setter; import java.time.Instant;
 @Entity @Table(name = "mcp_server") @Getter @Setter
 public class McpServer {
@@ -10,8 +10,8 @@ public class McpServer {
     @Column(nullable = false, length = 20) private String transport = "SSE";
     @Column(length = 500) private String endpoint;
     @Column(length = 500) private String command;
-    @Column(name = "env_config", length = 4096) private String envConfig;
-    @Column(length = 4096) private String tools;
+    @Column(name = "env_config", columnDefinition = "TEXT") private String envConfig;
+    @Column(columnDefinition = "JSON") private String tools;
     @Column(nullable = false, length = 20) private String status = "INACTIVE";
     @Column(nullable = false) private Short enabled = 1;
     @Column(name = "last_test_at") private Instant lastTestAt;

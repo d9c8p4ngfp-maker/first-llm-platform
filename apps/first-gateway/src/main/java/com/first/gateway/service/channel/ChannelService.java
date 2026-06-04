@@ -19,9 +19,11 @@ public interface ChannelService {
 
     Optional<Channel> findById(Long id);
 
+    Channel requireInTenant(Long id, Long tenantId);
+
     Channel save(Channel channel);
 
-    Channel createFromRequest(ChannelRequest request);
+    Channel createFromRequest(ChannelRequest request, Long tenantId);
 
     Channel createFromRequestForUser(Long tenantId, Long userId, ChannelRequest request);
 

@@ -1,3 +1,9 @@
 package com.first.gateway.web.workspace.dto;
 
-public record SkillBindingRequest(String type, Long bindingId) {}
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+public record SkillBindingRequest(
+    @NotBlank String type,
+    @NotNull Long bindingId
+) {}

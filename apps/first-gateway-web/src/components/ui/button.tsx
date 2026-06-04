@@ -17,7 +17,7 @@ export function Button({
         variant === 'outline' &&
           'border border-[hsl(var(--border))] bg-transparent hover:bg-[hsl(var(--muted))]',
         variant === 'ghost' && 'hover:bg-[hsl(var(--muted))]',
-        variant === 'destructive' && 'bg-red-600 text-white hover:bg-red-700',
+        variant === 'destructive' && 'bg-[hsl(var(--destructive))] text-white hover:opacity-90',
         className,
       )}
       {...props}

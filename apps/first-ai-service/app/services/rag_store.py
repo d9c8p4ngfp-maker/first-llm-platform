@@ -3,6 +3,38 @@ import math
 from pathlib import Path
 from typing import Any
 
+from app.config import settings
+
+
+def _pg_connection_string() -> str:
+    return (
+        f"postgresql+psycopg2://{settings.pg_user}:{settings.pg_password}"
+        f"@{settings.pg_host}:{settings.pg_port}/{settings.pg_db}"
+    )
+
+
+def get_vector_store(*, embedding_model: str, base_url: str, api_key: str, collection: str = "rag_chunks"):
+    """Get a PGVector vector store for RAG operations."""
+    try:
+        from langchain_community.vectorstores import PGVector
+        from langchain_openai import OpenAIEmbeddings
+
+        url = base_url.rstrip("/") + "/v1"
+        embeddings = OpenAIEmbeddings(
+            model=embedding_model,
+            openai_api_key=api_key,
+            openai_api_base=url,
+        )
+        return PGVector(
+            connection_string=_pg_connection_string(),
+            embedding_function=embeddings,
+            collection_name=collection,
+        )
+    except Exception:
+        return None
+
+
+# --- File-based fallback (when PGVector is unavailable) ---
 
 def _kb_path(data_dir: Path, kb_id: int) -> Path:
     return data_dir / f"kb_{kb_id}" / "chunks.jsonl"
@@ -19,7 +51,22 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
-def split_text(content: str, chunk_size: int, overlap: int) -> list[str]:
+def split_text(content: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
+    """Split text using LangChain RecursiveCharacterTextSplitter with file-based fallback."""
+    try:
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=overlap,
+            separators=["\n\n", "\n", ".", " ", ""],
+        )
+        return splitter.split_text(content or "")
+    except Exception:
+        return _split_text_simple(content, chunk_size, overlap)
+
+
+def _split_text_simple(content: str, chunk_size: int, overlap: int) -> list[str]:
     text = (content or "").strip()
     if not text:
         return []

@@ -104,6 +104,8 @@ export function ChatPage() {
     const isFirstMessage = messages.length === 0
     if (isFirstMessage && selectedSkill && !skillPrependedRef.current) {
       apiContent = `[Skill: ${selectedSkill.name}]\n\n${userContent}`
+
+
       skillPrependedRef.current = true
       setActiveSkillName(selectedSkill.name)
     }
@@ -184,7 +186,7 @@ export function ChatPage() {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-10rem)] max-w-6xl gap-4 md:h-[calc(100vh-11rem)]">
+    <div className="mx-auto flex flex-1 max-w-6xl gap-4 overflow-hidden">
       <aside className="hidden w-60 shrink-0 md:block">
         <ConversationList {...listProps} />
       </aside>
@@ -243,6 +245,13 @@ export function ChatPage() {
         </div>
         <div className="border-t border-[hsl(var(--border))] p-3">
           <ChatToolSelector value={toolSelection} onChange={setToolSelection} />
+          {streaming && (
+            <div className="mb-2 flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => abortRef.current?.abort()}>
+                停止生成
+              </Button>
+            </div>
+          )}
           <ChatInput value={input} onChange={setInput} onSend={sendMessage} disabled={streaming} />
         </div>
       </div>

@@ -43,6 +43,10 @@ public class RelayServiceImpl implements RelayService {
 
     private static final Logger log = LoggerFactory.getLogger(RelayServiceImpl.class);
 
+    private static final double DEFAULT_TEMPERATURE = 0.7;
+    private static final int DEFAULT_MAX_TOKENS = 4000;
+    private static final int MAX_USER_MEMORIES_IN_CHAT = 20;
+
     private final ChannelSelector channelSelector;
     private final OpenAiAdapter openAiAdapter;
     private final RelayUsageRecorder usageRecorder;
@@ -97,13 +101,70 @@ public class RelayServiceImpl implements RelayService {
         this.objectMapper = objectMapper;
     }
 
+    @FunctionalInterface
+    private interface RelayAttempt<T> {
+        T execute(ChannelSelection selection) throws Exception;
+    }
+
+    /**
+     * Executes a relay attempt across candidate channels with retry, RPM guard,
+     * health tracking, and failure recording. The attempt function should contain
+     * only the API call and success usage recording.
+     */
+    private <T> T executeWithChannelFallback(
+            List<ChannelSelection> candidates,
+            AuthService.AuthContext auth,
+            String model,
+            boolean stream,
+            long started,
+            long tpmReserved,
+            RelayAttempt<T> attemptFn) {
+
+        if (candidates.isEmpty()) {
+            throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
+        }
+
+        GatewayException lastError = null;
+        for (int i = 0; i < candidates.size(); i++) {
+            if (i > 0 && (lastError == null || !retryPolicy.shouldRetry(i, lastError))) {
+                break;
+            }
+            ChannelSelection sel = candidates.get(i);
+            if (!channelRpmGuard.acquire(sel.channel())) {
+                continue;
+            }
+            try {
+                T result = attemptFn.execute(sel);
+                channelHealthTracker.recordSuccess(sel.channel().getId());
+                return result;
+            } catch (GatewayException e) {
+                channelHealthTracker.recordFailure(sel.channel().getId());
+                lastError = e;
+                if (!retryPolicy.shouldRetry(i + 1, e)) {
+                    usageRecorder.recordFailure(auth, sel, model, stream, started, e, tpmReserved);
+                    throw e;
+                }
+            }
+        }
+        if (lastError != null) {
+            usageRecorder.recordFailure(auth, candidates.getLast(), model, stream, started, lastError, tpmReserved);
+            throw lastError;
+        }
+        throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
+    }
+
     @Override
     public Map<String, Object> chatCompletions(AuthService.AuthContext auth,
                                                  Map<String, Object> request,
                                                  long tpmReserved) {
         long started = System.currentTimeMillis();
         String model = requireModel(request);
-        Map<String, Object> enhancedRequest = chatPipelineEnhancer.enhance(request, auth.user().getId(), auth.apiKey().getTenantId());
+        Map<String, Object> enhancedRequest;
+        if (aiServiceProperties.isChat() && aiServiceClient.isHealthy()) {
+            enhancedRequest = request;
+        } else {
+            enhancedRequest = chatPipelineEnhancer.enhance(request, auth.user().getId(), auth.apiKey().getTenantId());
+        }
         String enhancedModel = enhancedRequest.containsKey("model") ? enhancedRequest.get("model").toString() : model;
         apiKeyPolicyService.assertModelAllowed(auth.apiKey(), enhancedModel);
         BigDecimal groupRatio = userGroupService.ratioForUser(auth.user().getId());
@@ -113,42 +174,23 @@ public class RelayServiceImpl implements RelayService {
             enhancedRequest, candidates.getFirst().model(), groupRatio);
         billingService.preReserve(auth.apiKey().getTenantId(), reserved);
 
-        GatewayException lastError = null;
         try {
-            for (int attempt = 0; attempt < candidates.size(); attempt++) {
-                if (attempt > 0 && (lastError == null || !retryPolicy.shouldRetry(attempt, lastError))) {
-                    break;
-                }
-                ChannelSelection selection = candidates.get(attempt);
-                if (!channelRpmGuard.acquire(selection.channel())) {
-                    continue;
-                }
-                Map<String, Object> upstreamRequest = buildUpstreamRequest(enhancedRequest, selection.model());
-                try {
+            return executeWithChannelFallback(candidates, auth, enhancedModel, false, started, tpmReserved,
+                (selection) -> {
+                    Map<String, Object> upstreamRequest = buildUpstreamRequest(enhancedRequest, selection.model());
                     Map<String, Object> response = tryPythonChat(auth.user().getId(), selection, upstreamRequest, false)
                         .orElseGet(() -> openAiAdapter.chat(selection.channel(), upstreamRequest));
-                    channelHealthTracker.recordSuccess(selection.channel().getId());
                     UsageParser.TokenUsage usage = usageParser.fromResponse(response);
                     usageRecorder.recordSuccess(auth, selection, enhancedModel, false, started,
                         usage.promptTokens(), usage.completionTokens(), usage.totalTokens(),
                         reserved, groupRatio, tpmReserved);
                     return response;
-                } catch (GatewayException ex) {
-                    channelHealthTracker.recordFailure(selection.channel().getId());
-                    lastError = ex;
-                    if (!retryPolicy.shouldRetry(attempt + 1, ex)) {
-                        usageRecorder.recordFailure(auth, selection, enhancedModel, false, started, ex, tpmReserved);
-                        throw ex;
-                    }
-                }
-            }
-            if (lastError != null) {
-                usageRecorder.recordFailure(auth, candidates.getLast(), enhancedModel, false, started, lastError, tpmReserved);
-                throw lastError;
-            }
-            throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
+                });
         } catch (RuntimeException ex) {
             billingService.releaseReserve(auth.apiKey().getTenantId(), reserved);
+            if (ex.getCause() instanceof GatewayException ge) {
+                throw ge;
+            }
             throw ex;
         }
     }
@@ -160,7 +202,12 @@ public class RelayServiceImpl implements RelayService {
                                       StreamConsumer consumer) {
         long started = System.currentTimeMillis();
         String model = requireModel(request);
-        Map<String, Object> enhancedRequest = chatPipelineEnhancer.enhance(request, auth.user().getId(), auth.apiKey().getTenantId());
+        Map<String, Object> enhancedRequest;
+        if (aiServiceProperties.isChat() && aiServiceClient.isHealthy()) {
+            enhancedRequest = request;
+        } else {
+            enhancedRequest = chatPipelineEnhancer.enhance(request, auth.user().getId(), auth.apiKey().getTenantId());
+        }
         String enhancedModel = enhancedRequest.containsKey("model") ? enhancedRequest.get("model").toString() : model;
         apiKeyPolicyService.assertModelAllowed(auth.apiKey(), enhancedModel);
         BigDecimal groupRatio = userGroupService.ratioForUser(auth.user().getId());
@@ -170,21 +217,13 @@ public class RelayServiceImpl implements RelayService {
             enhancedRequest, candidates.getFirst().model(), groupRatio);
         billingService.preReserve(auth.apiKey().getTenantId(), reserved);
 
-        GatewayException lastError = null;
+        AtomicBoolean chunkSent = new AtomicBoolean(false);
         try {
-            for (int attempt = 0; attempt < candidates.size(); attempt++) {
-                if (attempt > 0 && (lastError == null || !retryPolicy.shouldRetry(attempt, lastError))) {
-                    break;
-                }
-                ChannelSelection selection = candidates.get(attempt);
-                if (!channelRpmGuard.acquire(selection.channel())) {
-                    continue;
-                }
-                Map<String, Object> upstreamRequest = buildUpstreamRequest(enhancedRequest, selection.model());
-                StreamUsageAccumulator usageAccumulator = new StreamUsageAccumulator();
-                AtomicBoolean chunkSent = new AtomicBoolean(false);
-                try {
-                    boolean viaPython = tryPythonChatStream(auth.user().getId(), selection, upstreamRequest, chunk -> {
+            executeWithChannelFallback(candidates, auth, enhancedModel, true, started, tpmReserved,
+                (selection) -> {
+                    Map<String, Object> upstreamRequest = buildUpstreamRequest(enhancedRequest, selection.model());
+                    StreamUsageAccumulator usageAccumulator = new StreamUsageAccumulator();
+                    java.util.function.Consumer<String> chunkConsumer = chunk -> {
                         chunkSent.set(true);
                         consumer.accept(chunk);
                         UsageParser.TokenUsage chunkUsage = usageParser.fromStreamChunk(chunk);
@@ -194,43 +233,31 @@ public class RelayServiceImpl implements RelayService {
                                 chunkUsage.completionTokens(),
                                 chunkUsage.totalTokens());
                         }
-                    });
-                    if (!viaPython) {
-                        openAiAdapter.chatStream(selection.channel(), upstreamRequest, chunk -> {
-                            chunkSent.set(true);
-                            consumer.accept(chunk);
-                            UsageParser.TokenUsage chunkUsage = usageParser.fromStreamChunk(chunk);
-                            if (chunkUsage.totalTokens() > 0) {
-                                usageAccumulator.update(
-                                    chunkUsage.promptTokens(),
-                                    chunkUsage.completionTokens(),
-                                    chunkUsage.totalTokens());
-                            }
-                        });
-                    }
-                    channelHealthTracker.recordSuccess(selection.channel().getId());
-                    usageRecorder.recordSuccess(auth, selection, enhancedModel, true, started,
-                        usageAccumulator.promptTokens(),
-                        usageAccumulator.completionTokens(),
-                        usageAccumulator.totalTokens(),
-                        reserved, groupRatio, tpmReserved);
-                    return;
-                } catch (GatewayException ex) {
-                    channelHealthTracker.recordFailure(selection.channel().getId());
-                    lastError = ex;
-                    if (chunkSent.get() || !retryPolicy.shouldRetry(attempt + 1, ex)) {
-                        usageRecorder.recordFailure(auth, selection, enhancedModel, true, started, ex, tpmReserved);
+                    };
+                    try {
+                        boolean viaPython = tryPythonChatStream(auth.user().getId(), selection, upstreamRequest, chunkConsumer);
+                        if (!viaPython) {
+                            openAiAdapter.chatStream(selection.channel(), upstreamRequest, chunkConsumer);
+                        }
+                        usageRecorder.recordSuccess(auth, selection, enhancedModel, true, started,
+                            usageAccumulator.promptTokens(),
+                            usageAccumulator.completionTokens(),
+                            usageAccumulator.totalTokens(),
+                            reserved, groupRatio, tpmReserved);
+                        return null;
+                    } catch (GatewayException ex) {
+                        if (chunkSent.get()) {
+                            usageRecorder.recordFailure(auth, selection, enhancedModel, true, started, ex, tpmReserved);
+                            throw new RuntimeException(ex);
+                        }
                         throw ex;
                     }
-                }
-            }
-            if (lastError != null) {
-                usageRecorder.recordFailure(auth, candidates.getLast(), enhancedModel, true, started, lastError, tpmReserved);
-                throw lastError;
-            }
-            throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
+                });
         } catch (RuntimeException ex) {
             billingService.releaseReserve(auth.apiKey().getTenantId(), reserved);
+            if (ex.getCause() instanceof GatewayException ge) {
+                throw ge;
+            }
             throw ex;
         }
     }
@@ -251,40 +278,35 @@ public class RelayServiceImpl implements RelayService {
             embedRequest, candidates.getFirst().model(), groupRatio);
         billingService.preReserve(auth.apiKey().getTenantId(), reserved);
 
-        GatewayException lastError = null;
         try {
-            for (int attempt = 0; attempt < candidates.size(); attempt++) {
-                if (attempt > 0 && (lastError == null || !retryPolicy.shouldRetry(attempt, lastError))) {
-                    break;
-                }
-                ChannelSelection selection = candidates.get(attempt);
-                if (!channelRpmGuard.acquire(selection.channel())) {
-                    continue;
-                }
-                Map<String, Object> upstreamRequest = buildUpstreamRequest(request, selection.model());
-                try {
-                    Map<String, Object> response = openAiAdapter.embed(selection.channel(), upstreamRequest);
-                    channelHealthTracker.recordSuccess(selection.channel().getId());
+            return executeWithChannelFallback(candidates, auth, model, false, started, tpmReserved,
+                (selection) -> {
+                    Map<String, Object> upstreamRequest = buildUpstreamRequest(request, selection.model());
+                    Map<String, Object> response;
+                    if (aiServiceProperties.isEnabled() && aiServiceClient.isHealthy()) {
+                        Map<String, Object> pythonRequest = new LinkedHashMap<>();
+                        pythonRequest.put("input", upstreamRequest.get("input"));
+                        pythonRequest.put("model", upstreamRequest.getOrDefault("model", aiServiceProperties.getEmbeddingModel()));
+                        Map<String, Object> upstream = new LinkedHashMap<>();
+                        upstream.put("base_url", selection.channel().getBaseUrl());
+                        upstream.put("api_key", channelKeyCrypto.decrypt(selection.channel().getApiKeyEncrypted()));
+                        upstream.put("model", selection.model().getModelName());
+                        pythonRequest.put("upstream", upstream);
+                        response = aiServiceClient.embed(pythonRequest)
+                            .orElseThrow(() -> new GatewayException(GatewayError.UPSTREAM_ERROR, "ai service embed failed"));
+                    } else {
+                        response = openAiAdapter.embed(selection.channel(), upstreamRequest);
+                    }
                     UsageParser.TokenUsage usage = usageParser.fromResponse(response);
                     usageRecorder.recordSuccess(auth, selection, model, false, started,
                         usage.promptTokens(), 0, usage.totalTokens(), reserved, groupRatio, tpmReserved);
                     return response;
-                } catch (GatewayException ex) {
-                    channelHealthTracker.recordFailure(selection.channel().getId());
-                    lastError = ex;
-                    if (!retryPolicy.shouldRetry(attempt + 1, ex)) {
-                        usageRecorder.recordFailure(auth, selection, model, false, started, ex, tpmReserved);
-                        throw ex;
-                    }
-                }
-            }
-            if (lastError != null) {
-                usageRecorder.recordFailure(auth, candidates.getLast(), model, false, started, lastError, tpmReserved);
-                throw lastError;
-            }
-            throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
+                });
         } catch (RuntimeException ex) {
             billingService.releaseReserve(auth.apiKey().getTenantId(), reserved);
+            if (ex.getCause() instanceof GatewayException ge) {
+                throw ge;
+            }
             throw ex;
         }
     }
@@ -328,12 +350,12 @@ public class RelayServiceImpl implements RelayService {
         if (upstreamRequest.get("temperature") instanceof Number t) {
             modelParams.put("temperature", t.doubleValue());
         } else {
-            modelParams.put("temperature", 0.7);
+            modelParams.put("temperature", DEFAULT_TEMPERATURE);
         }
         if (upstreamRequest.get("max_tokens") instanceof Number m) {
             modelParams.put("max_tokens", m.intValue());
         } else {
-            modelParams.put("max_tokens", 4000);
+            modelParams.put("max_tokens", DEFAULT_MAX_TOKENS);
         }
         body.put("model_params", modelParams);
 
@@ -350,7 +372,7 @@ public class RelayServiceImpl implements RelayService {
 
         List<UserMemory> memories = userMemoryService.listForUser(userId, null);
         List<Map<String, Object>> memRows = new ArrayList<>();
-        int limit = Math.min(memories.size(), 20);
+        int limit = Math.min(memories.size(), MAX_USER_MEMORIES_IN_CHAT);
         for (int i = 0; i < limit; i++) {
             UserMemory m = memories.get(i);
             Map<String, Object> row = new LinkedHashMap<>();

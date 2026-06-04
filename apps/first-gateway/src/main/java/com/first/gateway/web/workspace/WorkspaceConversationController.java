@@ -9,6 +9,7 @@ import com.first.gateway.web.workspace.dto.ConversationUpdateRequest;
 import com.first.gateway.web.workspace.support.WorkspaceAccess;
 import com.first.gateway.web.workspace.support.WorkspaceRequest;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -44,7 +45,7 @@ public class WorkspaceConversationController {
 
     @PostMapping("/{id}/messages")
     public ConversationMessage appendMessage(@PathVariable Long id,
-                                             @RequestBody ConversationMessageRequest body,
+                                             @Valid @RequestBody ConversationMessageRequest body,
                                              HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return conversationService.appendMessage(
@@ -53,7 +54,7 @@ public class WorkspaceConversationController {
 
     @PutMapping("/{id}")
     public Conversation update(@PathVariable Long id,
-                               @RequestBody ConversationUpdateRequest body,
+                               @Valid @RequestBody ConversationUpdateRequest body,
                                HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return conversationService.rename(id, principal.tenantId(), body.title());

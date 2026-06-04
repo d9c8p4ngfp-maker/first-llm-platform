@@ -15,4 +15,6 @@ public interface ChannelRepository extends JpaRepository<Channel, Long> {
     List<Channel> findByTypeAndStatus(String type, ChannelStatus status);
 
     List<Channel> findByUserIdAndDeletedOrderByPriorityDescWeightDesc(Long userId, Short deleted);
+
+    List<Channel> findByTenantIdAndDeleted(Long tenantId, Short deleted);
 }

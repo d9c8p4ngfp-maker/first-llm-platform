@@ -3,6 +3,7 @@ package com.first.gateway.service.channel;
 import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.infra.error.GatewayException;
+import com.first.gateway.infra.security.UpstreamUrlValidator;
 import com.first.gateway.relay.adapter.OpenAiAdapter;
 import com.first.gateway.repository.ChannelModelRepository;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class ChannelTestService {
 
     public Map<String, Object> test(Channel channel) {
         long started = System.currentTimeMillis();
+        UpstreamUrlValidator.validate(channel.getBaseUrl());
         List<ChannelModel> models = channelModelRepository.findByChannelIdAndEnabled(channel.getId(), (short) 1);
         if (models.isEmpty()) {
             return Map.of("success", false, "latencyMs", 0, "error", "no enabled model on channel");

@@ -1,6 +1,7 @@
 package com.first.gateway.service.relay;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.first.gateway.config.AiServiceProperties;
 import com.first.gateway.service.relay.ChatPipelineEnhancer;
 import com.first.gateway.config.GatewayProperties;
 import com.first.gateway.domain.entity.ApiKey;
@@ -9,6 +10,8 @@ import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.domain.entity.User;
 import com.first.gateway.domain.enums.ApiKeyStatus;
 import com.first.gateway.domain.enums.UserStatus;
+import com.first.gateway.infra.ai.AiServiceClient;
+import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
 import com.first.gateway.relay.adapter.OpenAiAdapter;
@@ -17,10 +20,12 @@ import com.first.gateway.relay.router.ChannelSelection;
 import com.first.gateway.relay.router.ChannelSelector;
 import com.first.gateway.relay.router.RetryPolicy;
 import com.first.gateway.relay.support.UsageParser;
+import com.first.gateway.repository.UserProfileRepository;
 import com.first.gateway.service.auth.ApiKeyPolicyService;
 import com.first.gateway.service.auth.AuthService;
 import com.first.gateway.service.billing.BillingService;
 import com.first.gateway.service.channel.ChannelRpmGuard;
+import com.first.gateway.service.profile.UserMemoryService;
 import com.first.gateway.service.user.UserGroupService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +42,7 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -67,10 +73,23 @@ class RelayServiceImplTest {
     private ChannelHealthTracker channelHealthTracker;
     @Mock
     private ChannelRpmGuard channelRpmGuard;
+    @Mock
+    private AiServiceClient aiServiceClient;
+    @Mock
+    private AiServiceProperties aiServiceProperties;
+    @Mock
+    private ChannelKeyCrypto channelKeyCrypto;
+    @Mock
+    private UserProfileRepository userProfileRepository;
+    @Mock
+    private UserMemoryService userMemoryService;
+    @Mock
+    private ObjectMapper objectMapper;
 
     private RelayServiceImpl relayService;
     private AuthService.AuthContext authContext;
     private RetryPolicy retryPolicy;
+    private ChatPipelineEnhancer chatPipelineEnhancer;
 
     @BeforeEach
     void setUp() {
@@ -78,15 +97,51 @@ class RelayServiceImplTest {
         properties.getRetry().setMaxAttempts(3);
         retryPolicy = new RetryPolicy(properties);
         UsageParser usageParser = new UsageParser(new ObjectMapper());
-        ChatPipelineEnhancer chatPipelineEnhancer = mock(ChatPipelineEnhancer.class);
+        chatPipelineEnhancer = mock(ChatPipelineEnhancer.class);
         lenient().when(chatPipelineEnhancer.enhance(any(), anyLong(), anyLong())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(aiServiceProperties.isChat()).thenReturn(false);
+        lenient().when(aiServiceProperties.isEnabled()).thenReturn(false);
+        lenient().when(aiServiceProperties.getEmbeddingModel()).thenReturn("text-embedding-ada-002");
+        lenient().when(aiServiceClient.isHealthy()).thenReturn(true);
         relayService = new RelayServiceImpl(
             channelSelector, openAiAdapter, usageRecorder, usageParser,
             apiKeyPolicyService, billingService, retryPolicy,
-            userGroupService, channelHealthTracker, channelRpmGuard, chatPipelineEnhancer);
+            userGroupService, channelHealthTracker, channelRpmGuard, chatPipelineEnhancer,
+            aiServiceClient, aiServiceProperties, channelKeyCrypto,
+            userProfileRepository, userMemoryService, objectMapper);
         authContext = new AuthService.AuthContext(activeApiKey(), activeUser());
         lenient().when(userGroupService.ratioForUser(1L)).thenReturn(BigDecimal.ONE);
         lenient().when(channelRpmGuard.acquire(any())).thenReturn(true);
+    }
+
+    // ---------- basic cases (unchanged logic) ----------
+
+    private static ChannelSelection selection(String modelName, long channelId) {
+        Channel channel = new Channel();
+        channel.setId(channelId);
+        channel.setBaseUrl("https://api.deepseek.com");
+        channel.setPriority(10);
+        channel.setWeight(1);
+        ChannelModel model = new ChannelModel();
+        model.setChannelId(channelId);
+        model.setModelName(modelName);
+        return new ChannelSelection(channel, model);
+    }
+
+    private static ApiKey activeApiKey() {
+        ApiKey apiKey = new ApiKey();
+        apiKey.setId(10L);
+        apiKey.setTenantId(1L);
+        apiKey.setUserId(1L);
+        apiKey.setStatus(ApiKeyStatus.ACTIVE);
+        return apiKey;
+    }
+
+    private static User activeUser() {
+        User user = new User();
+        user.setId(1L);
+        user.setStatus(UserStatus.ACTIVE);
+        return user;
     }
 
     @Test
@@ -223,31 +278,226 @@ class RelayServiceImplTest {
         verify(openAiAdapter, never()).chatStream(eq(second.channel()), any(), any());
     }
 
-    private static ChannelSelection selection(String modelName, long channelId) {
-        Channel channel = new Channel();
-        channel.setId(channelId);
-        channel.setBaseUrl("https://api.deepseek.com");
-        channel.setPriority(10);
-        channel.setWeight(1);
-        ChannelModel model = new ChannelModel();
-        model.setChannelId(channelId);
-        model.setModelName(modelName);
-        return new ChannelSelection(channel, model);
+    // ---------- edge-case tests for retry / exception / RPM ----------
+
+    @Test
+    void emptyCandidates_throwsNoAvailableChannel() {
+        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of());
+
+        GatewayException ex = assertThrows(GatewayException.class,
+            () -> relayService.chatCompletions(authContext,
+                Map.of("model", "deepseek-chat", "messages", List.of()), 0L));
+
+        assertEquals(GatewayError.NO_AVAILABLE_CHANNEL, ex.getError());
     }
 
-    private static ApiKey activeApiKey() {
-        ApiKey apiKey = new ApiKey();
-        apiKey.setId(10L);
-        apiKey.setTenantId(1L);
-        apiKey.setUserId(1L);
-        apiKey.setStatus(ApiKeyStatus.ACTIVE);
-        return apiKey;
+    @Test
+    void nonRetryableGatewayException_throwsImmediatelyAndRecordsFailureForThatCandidate() {
+        ChannelSelection first = selection("deepseek-chat", 1L);
+        ChannelSelection second = selection("deepseek-chat", 2L);
+        GatewayException invalidRequest = GatewayException.withInternal(GatewayError.INVALID_REQUEST, "bad input");
+
+        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of(first, second));
+        doThrow(invalidRequest).when(openAiAdapter).chat(eq(first.channel()), any());
+
+        GatewayException ex = assertThrows(GatewayException.class,
+            () -> relayService.chatCompletions(authContext,
+                Map.of("model", "deepseek-chat", "messages", List.of()), 0L));
+
+        assertEquals(GatewayError.INVALID_REQUEST, ex.getError());
+        // Never tries second
+        verify(openAiAdapter, never()).chat(eq(second.channel()), any());
+        // recordFailure for the first (failing) candidate
+        verify(usageRecorder).recordFailure(
+            eq(authContext), eq(first), eq("deepseek-chat"), eq(false), anyLong(), eq(invalidRequest), eq(0L));
+        verify(billingService).releaseReserve(eq(1L), anyLong());
     }
 
-    private static User activeUser() {
-        User user = new User();
-        user.setId(1L);
-        user.setStatus(UserStatus.ACTIVE);
-        return user;
+    @Test
+    void allCandidatesExhausted_throwsLastErrorAndRecordsFailure() {
+        ChannelSelection c1 = selection("deepseek-chat", 1L);
+        ChannelSelection c2 = selection("deepseek-chat", 2L);
+        ChannelSelection c3 = selection("deepseek-chat", 3L);
+        GatewayException e1 = GatewayException.withInternal(GatewayError.UPSTREAM_ERROR, "err1");
+        GatewayException e2 = GatewayException.withInternal(GatewayError.UPSTREAM_TIMEOUT, "err2");
+        GatewayException e3 = GatewayException.withInternal(GatewayError.RATE_LIMIT_EXCEEDED, "err3");
+
+        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of(c1, c2, c3));
+        doThrow(e1).when(openAiAdapter).chat(eq(c1.channel()), any());
+        doThrow(e2).when(openAiAdapter).chat(eq(c2.channel()), any());
+        doThrow(e3).when(openAiAdapter).chat(eq(c3.channel()), any());
+
+        // 3rd attempt (i=2): shouldRetry(3, e3) → false because attemptIndex >= maxAttempts(3)
+        // throws e3 from inside the loop
+        GatewayException ex = assertThrows(GatewayException.class,
+            () -> relayService.chatCompletions(authContext,
+                Map.of("model", "deepseek-chat", "messages", List.of()), 0L));
+
+        assertEquals(GatewayError.RATE_LIMIT_EXCEEDED, ex.getError());
+        // recordFailure for the third candidate
+        verify(usageRecorder).recordFailure(
+            eq(authContext), eq(c3), eq("deepseek-chat"), eq(false), anyLong(), eq(e3), eq(0L));
+        verify(billingService).releaseReserve(eq(1L), anyLong());
+    }
+
+    @Test
+    void rpmGuardRejectsAll_throwsNoAvailableChannel() {
+        ChannelSelection c1 = selection("deepseek-chat", 1L);
+        ChannelSelection c2 = selection("deepseek-chat", 2L);
+
+        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of(c1, c2));
+        when(channelRpmGuard.acquire(any())).thenReturn(false);
+
+        GatewayException ex = assertThrows(GatewayException.class,
+            () -> relayService.chatCompletions(authContext,
+                Map.of("model", "deepseek-chat", "messages", List.of()), 0L));
+
+        assertEquals(GatewayError.NO_AVAILABLE_CHANNEL, ex.getError());
+        verify(billingService).preReserve(eq(1L), anyLong());
+        verify(billingService).releaseReserve(eq(1L), anyLong());
+    }
+
+    @Test
+    void rpmGuardSkipsFirstCandidate_retriesSecondSuccessfully() {
+        ChannelSelection c1 = selection("deepseek-chat", 1L);
+        ChannelSelection c2 = selection("deepseek-chat", 2L);
+        Map<String, Object> upstreamResponse = Map.of("usage", Map.of("total_tokens", 1));
+
+        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of(c1, c2));
+        when(channelRpmGuard.acquire(c1.channel())).thenReturn(false);
+        when(channelRpmGuard.acquire(c2.channel())).thenReturn(true);
+        when(openAiAdapter.chat(eq(c2.channel()), any())).thenReturn(upstreamResponse);
+
+        relayService.chatCompletions(authContext,
+            Map.of("model", "deepseek-chat", "messages", List.of()), 0L);
+
+        verify(openAiAdapter).chat(eq(c2.channel()), any());
+        verify(usageRecorder).recordSuccess(
+            eq(authContext), eq(c2), eq("deepseek-chat"), eq(false), anyLong(),
+            eq(0), eq(0), eq(1), anyLong(), eq(BigDecimal.ONE), eq(0L));
+    }
+
+    @Test
+    void channelHealthTracker_markedSuccessOnFirstCandidate() {
+        ChannelSelection sel = selection("deepseek-chat", 1L);
+        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of(sel));
+        when(openAiAdapter.chat(eq(sel.channel()), any())).thenReturn(Map.of("usage", Map.of("total_tokens", 1)));
+
+        relayService.chatCompletions(authContext,
+            Map.of("model", "deepseek-chat", "messages", List.of()), 0L);
+
+        verify(channelHealthTracker).recordSuccess(1L);
+    }
+
+    @Test
+    void channelHealthTracker_markedFailureOnEachFailedCandidate() {
+        ChannelSelection c1 = selection("deepseek-chat", 1L);
+        ChannelSelection c2 = selection("deepseek-chat", 2L);
+        GatewayException upstream = GatewayException.withInternal(GatewayError.UPSTREAM_ERROR, "err");
+
+        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of(c1, c2));
+        doThrow(upstream).when(openAiAdapter).chat(eq(c1.channel()), any());
+        when(openAiAdapter.chat(eq(c2.channel()), any())).thenReturn(Map.of("usage", Map.of("total_tokens", 1)));
+
+        relayService.chatCompletions(authContext,
+            Map.of("model", "deepseek-chat", "messages", List.of()), 0L);
+
+        verify(channelHealthTracker).recordFailure(1L);
+        verify(channelHealthTracker).recordSuccess(2L);
+    }
+
+    // ---------- edge-case tests for retry / exception / RPM ----------
+        ChannelSelection first = selection("deepseek-chat", 1L);
+        ChannelSelection second = selection("deepseek-chat", 2L);
+        GatewayException midStreamError = GatewayException.withInternal(GatewayError.UPSTREAM_ERROR, "upstream lost");
+
+        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of(first, second));
+        doAnswer(invocation -> {
+            Consumer<String> consumer = invocation.getArgument(2);
+            consumer.accept("data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n");
+            throw midStreamError;
+        }).when(openAiAdapter).chatStream(eq(first.channel()), any(), any());
+
+        GatewayException ex = assertThrows(GatewayException.class,
+            () -> relayService.chatCompletionsStream(authContext,
+                Map.of("model", "deepseek-chat", "messages", List.of()), 0L,
+                chunk -> {}));
+
+        assertEquals(GatewayError.UPSTREAM_ERROR, ex.getError());
+        // recordFailure must have been called before re-wrapping
+        verify(usageRecorder).recordFailure(
+            eq(authContext), eq(first), eq("deepseek-chat"), eq(true), anyLong(), eq(midStreamError), eq(0L));
+        // billing release: the RuntimeException caught by public method triggers releaseReserve
+        verify(billingService).releaseReserve(eq(1L), anyLong());
+        verify(openAiAdapter, never()).chatStream(eq(second.channel()), any(), any());
+    }
+
+    @Test
+    void stream_chunkSentThenGatewayException_wrapsInRuntimeException() {
+        ChannelSelection first = selection("deepseek-chat", 1L);
+        ChannelSelection second = selection("deepseek-chat", 2L);
+        GatewayException midStreamError = GatewayException.withInternal(GatewayError.UPSTREAM_ERROR, "upstream lost");
+
+        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of(first, second));
+        doAnswer(invocation -> {
+            Consumer<String> consumer = invocation.getArgument(2);
+            consumer.accept("data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n");
+            throw midStreamError;
+        }).when(openAiAdapter).chatStream(eq(first.channel()), any(), any());
+
+        // The public method unwraps the RuntimeException and re-throws the GatewayException
+        GatewayException ex = assertThrows(GatewayException.class,
+            () -> relayService.chatCompletionsStream(authContext,
+                Map.of("model", "deepseek-chat", "messages", List.of()), 0L,
+                chunk -> {}));
+
+        assertEquals(GatewayError.UPSTREAM_ERROR, ex.getError());
+        verify(billingService).releaseReserve(eq(1L), anyLong());
+    }
+
+    @Test
+    void stream_chunkNotSentThenGatewayException_canRetryNextChannel() {
+        ChannelSelection first = selection("deepseek-chat", 1L);
+        ChannelSelection second = selection("deepseek-chat", 2L);
+        GatewayException upstreamError = GatewayException.withInternal(GatewayError.UPSTREAM_ERROR, "no chunk");
+
+        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of(first, second));
+        // No chunk emitted before the exception
+        doThrow(upstreamError).when(openAiAdapter).chatStream(eq(first.channel()), any(), any());
+        doAnswer(invocation -> {
+            Consumer<String> consumer = invocation.getArgument(2);
+            consumer.accept("data: {\"usage\":{\"total_tokens\":1}}\n\n");
+            return null;
+        }).when(openAiAdapter).chatStream(eq(second.channel()), any(), any());
+
+        relayService.chatCompletionsStream(authContext,
+            Map.of("model", "deepseek-chat", "messages", List.of()), 0L,
+            chunk -> {});
+
+        verify(openAiAdapter).chatStream(eq(second.channel()), any(), any());
+        verify(channelHealthTracker).recordFailure(1L);
+        verify(channelHealthTracker).recordSuccess(2L);
+    }
+
+    @Test
+    void stream_retryBreakRespectsMaxAttempts() {
+        ChannelSelection c1 = selection("deepseek-chat", 1L);
+        ChannelSelection c2 = selection("deepseek-chat", 2L);
+        ChannelSelection c3 = selection("deepseek-chat", 3L);
+        GatewayException err = GatewayException.withInternal(GatewayError.UPSTREAM_ERROR, "fail");
+
+        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of(c1, c2, c3));
+        doThrow(err).when(openAiAdapter).chatStream(any(), any(), any());
+
+        GatewayException ex = assertThrows(GatewayException.class,
+            () -> relayService.chatCompletionsStream(authContext,
+                Map.of("model", "deepseek-chat", "messages", List.of()), 0L,
+                chunk -> {}));
+
+        assertEquals(GatewayError.UPSTREAM_ERROR, ex.getError());
+        // recordFailure should happen for the last candidate (c3) — the one that exhausted retries
+        verify(usageRecorder).recordFailure(
+            eq(authContext), eq(c3), eq("deepseek-chat"), eq(true), anyLong(), eq(err), eq(0L));
+        verify(billingService).releaseReserve(eq(1L), anyLong());
     }
 }

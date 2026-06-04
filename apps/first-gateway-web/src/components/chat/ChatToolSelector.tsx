@@ -28,7 +28,7 @@ export function ChatToolSelector({ value, onChange }: ChatToolSelectorProps) {
       {value.knowledgeBaseIds.map((id) => {
         const kb = kbList.find((k) => k.id === id)
         return (
-          <span key={id} className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+          <span key={id} className="inline-flex items-center gap-1 rounded-full bg-brand-muted px-2 py-0.5 text-xs text-brand dark:bg-brand-muted dark:text-brand">
             <BookOpen className="h-3 w-3" />
             {kb?.name ?? `KB#${id}`}
             <button type="button" onClick={() => onChange({ ...value, knowledgeBaseIds: value.knowledgeBaseIds.filter((x) => x !== id) })}>
@@ -39,7 +39,7 @@ export function ChatToolSelector({ value, onChange }: ChatToolSelectorProps) {
       })}
 
       {value.promptTemplateId && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+        <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(var(--accent))] px-2 py-0.5 text-xs text-[hsl(var(--accent-foreground))] dark:bg-[hsl(var(--accent))] dark:text-[hsl(var(--accent-foreground))]">
           <FileText className="h-3 w-3" />
           {promptList.find((p) => p.id === value.promptTemplateId)?.name ?? `Prompt#${value.promptTemplateId}`}
           <button type="button" onClick={() => onChange({ ...value, promptTemplateId: null, promptVariables: {} })}>

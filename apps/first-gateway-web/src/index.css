@@ -24,6 +24,8 @@
     --border: 220 13% 88%;
     --input: 220 13% 88%;
     --ring: 187 72% 42%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
     --primary: 222 47% 11%;
     --primary-foreground: 210 20% 98%;
     --destructive: 0 72% 51%;
@@ -46,6 +48,8 @@
     --border: 222 14% 18%;
     --input: 222 14% 18%;
     --ring: 187 65% 48%;
+    --popover: 222 20% 9%;
+    --popover-foreground: 210 20% 96%;
     --primary: 210 20% 96%;
     --primary-foreground: 222 47% 8%;
     --destructive: 0 62% 50%;

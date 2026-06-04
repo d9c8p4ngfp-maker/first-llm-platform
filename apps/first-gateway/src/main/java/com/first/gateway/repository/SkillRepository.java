@@ -5,4 +5,5 @@ import java.util.List; import java.util.Optional;
 public interface SkillRepository extends JpaRepository<Skill, Long> {
     List<Skill> findByUserIdAndDeletedOrderBySortOrderAsc(Long userId, Short deleted);
     Optional<Skill> findByIdAndUserIdAndDeleted(Long id, Long userId, Short deleted);
+    Optional<Skill> findByIdAndTenantIdAndDeleted(Long id, Long tenantId, Short deleted);
 }

@@ -6,6 +6,7 @@ import com.first.gateway.web.workspace.dto.SettingsUpdateRequest;
 import com.first.gateway.web.workspace.support.WorkspaceAccess;
 import com.first.gateway.web.workspace.support.WorkspaceRequest;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -27,7 +28,7 @@ public class WorkspaceSettingsController {
     }
 
     @PutMapping
-    public Map<String, Object> update(@RequestBody SettingsUpdateRequest body, HttpServletRequest request) {
+    public Map<String, Object> update(@Valid @RequestBody SettingsUpdateRequest body, HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return preferenceService.saveSettings(principal.userId(), body.defaultModel(), body.theme(), body.language());
     }

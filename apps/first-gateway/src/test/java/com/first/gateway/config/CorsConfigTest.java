@@ -1,5 +1,6 @@
 package com.first.gateway.config;
 
+import com.first.gateway.support.RedisIntegrationSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -16,7 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("dev")
-class CorsConfigTest {
+class CorsConfigTest extends RedisIntegrationSupport {
 
     @Autowired
     private MockMvc mockMvc;

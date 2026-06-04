@@ -20,7 +20,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+
+import org.springframework.scheduling.annotation.Scheduled;
+
+import jakarta.annotation.PostConstruct;
 
 @Component
 public class AiServiceClient {
@@ -30,11 +35,17 @@ public class AiServiceClient {
     private final AiServiceProperties properties;
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
+    private final AtomicBoolean healthyCache = new AtomicBoolean(false);
 
     public AiServiceClient(AiServiceProperties properties, WebClient aiServiceWebClient, ObjectMapper objectMapper) {
         this.properties = properties;
         this.webClient = aiServiceWebClient;
         this.objectMapper = objectMapper;
+    }
+
+    @PostConstruct
+    void initHealthCache() {
+        refreshHealthStatus();
     }
 
     public boolean isEnabled() {
@@ -90,9 +101,23 @@ public class AiServiceClient {
     }
 
     public boolean isHealthy() {
-        return fetchHealth()
-            .map(body -> "ok".equalsIgnoreCase(String.valueOf(body.get("status"))))
+        return healthyCache.get();
+    }
+
+    @Scheduled(fixedRate = 3000)
+    void refreshHealthStatus() {
+        if (!properties.isEnabled()) {
+            healthyCache.set(false);
+            return;
+        }
+        boolean result = fetchHealth()
+            .map(body -> {
+                Object healthy = body.get("healthy");
+                if (healthy instanceof Boolean b) return b;
+                return "ok".equalsIgnoreCase(String.valueOf(body.get("status")));
+            })
             .orElse(false);
+        healthyCache.set(result);
     }
 
     public Optional<Map<String, Object>> chat(Map<String, Object> request) {
@@ -217,6 +242,26 @@ public class AiServiceClient {
             return Optional.of(chunks);
         } catch (Exception ex) {
             log.warn("AI RAG query failed: {}", ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    public Optional<Map<String, Object>> embed(Map<String, Object> request) {
+        if (!isEnabled()) {
+            return Optional.empty();
+        }
+        try {
+            Map<String, Object> body = webClient.post()
+                .uri("/ai/rag/embed")
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
+                .block(Duration.ofMillis(properties.getReadTimeoutMs()));
+            return Optional.ofNullable(body);
+        } catch (Exception ex) {
+            log.warn("AI embed call failed: {}", ex.getMessage());
             return Optional.empty();
         }
     }

@@ -20,6 +20,9 @@ public class TokenUsageLog {
     @Column(name = "tenant_id")
     private Long tenantId;
 
+    @Column(name = "user_id")
+    private Long userId;
+
     @Column(name = "api_key_id")
     private Long apiKeyId;
 

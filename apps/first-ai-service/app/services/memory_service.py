@@ -1,5 +1,4 @@
 import json
-import re
 from datetime import date
 
 from app.models.memory import (
@@ -10,9 +9,7 @@ from app.models.memory import (
     MessageTurn,
 )
 from app.prompts.extraction import default_extraction_prompt
-from app.services.llm_client import chat_completion
-
-_JSON_FENCE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE)
+from app.services.llm_client import invoke_chat
 
 
 def _format_existing(memories: list[ExistingMemory]) -> str:
@@ -35,24 +32,54 @@ def _format_conversation(segment: list[MessageTurn]) -> str:
     return "\n\n".join(parts)
 
 
-def _normalize_json(text: str) -> str:
-    trimmed = (text or "").strip()
+def _parse_memories(raw: str) -> list[ExtractedMemory]:
+    """Parse extraction result using LangChain JsonOutputParser with fallback."""
+    try:
+        from langchain_core.output_parsers import JsonOutputParser
+        parser = JsonOutputParser()
+        items = parser.invoke(raw)
+    except Exception:
+        return _parse_memories_fallback(raw)
+
+    if not isinstance(items, list):
+        return []
+    result: list[ExtractedMemory] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        if not content or not str(content).strip():
+            continue
+        result.append(
+            ExtractedMemory(
+                category=str(item.get("category") or "FACT"),
+                content=str(content).strip(),
+                importance=int(item.get("importance") or 3),
+                schedule_date=item.get("schedule_date"),
+                schedule_time=item.get("schedule_time"),
+                numeric_value=item.get("numeric_value"),
+                update_ref=item.get("update_ref"),
+            )
+        )
+    return result
+
+
+def _parse_memories_fallback(raw: str) -> list[ExtractedMemory]:
+    """Fallback JSON parsing with markdown fence handling."""
+    import re
+    trimmed = (raw or "").strip()
     if not trimmed:
-        return "[]"
-    m = _JSON_FENCE.search(trimmed)
+        return []
+    fence = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE)
+    m = fence.search(trimmed)
     if m:
         trimmed = m.group(1).strip()
     start = trimmed.find("[")
     end = trimmed.rfind("]")
     if start >= 0 and end > start:
-        return trimmed[start : end + 1]
-    return trimmed
-
-
-def _parse_memories(raw: str) -> list[ExtractedMemory]:
-    normalized = _normalize_json(raw)
+        trimmed = trimmed[start : end + 1]
     try:
-        items = json.loads(normalized)
+        items = json.loads(trimmed)
     except json.JSONDecodeError:
         return []
     if not isinstance(items, list):
@@ -91,7 +118,7 @@ def extract_memories(req: MemoryExtractRequest) -> MemoryExtractResponse:
     max_tokens = int(params.get("max_tokens", 2000))
     model = req.config.model or req.upstream.model
 
-    data, usage = chat_completion(
+    data = invoke_chat(
         base_url=req.upstream.base_url,
         api_key=req.upstream.api_key,
         model=model,
@@ -102,6 +129,8 @@ def extract_memories(req: MemoryExtractRequest) -> MemoryExtractResponse:
         temperature=temperature,
         max_tokens=max_tokens,
     )
+
+    usage = data.get("usage") if data else None
     content = ""
     if data:
         choices = data.get("choices") or []

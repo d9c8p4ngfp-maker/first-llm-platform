@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { skillsApi } from '@/api/skills'
@@ -33,7 +33,7 @@ export function SkillBindings({ skillId }: { skillId: number }) {
     },
   })
 
-  const bindings: { id: number; bindingType: string; bindingId: number }[] = (skill as any)?.bindings ?? []
+  const bindings = skill?.bindings ?? []
   const options = addType === 'KNOWLEDGE_BASE' ? kbList : promptList
 
   return (

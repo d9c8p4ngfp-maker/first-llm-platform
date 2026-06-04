@@ -7,6 +7,7 @@ import com.first.gateway.web.workspace.dto.UserMemoryRequest;
 import com.first.gateway.web.workspace.support.WorkspaceAccess;
 import com.first.gateway.web.workspace.support.WorkspaceRequest;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,7 +32,7 @@ public class WorkspaceMemoryController {
     }
 
     @PostMapping
-    public UserMemory create(@RequestBody UserMemoryRequest body, HttpServletRequest request) {
+    public UserMemory create(@Valid @RequestBody UserMemoryRequest body, HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return userMemoryService.create(principal.userId(), principal.tenantId(),
             body.category(), body.content(), body.importance(), body.scheduleDate(),
@@ -40,7 +41,7 @@ public class WorkspaceMemoryController {
 
     @PutMapping("/{id}")
     public UserMemory update(@PathVariable Long id,
-                             @RequestBody UserMemoryRequest body,
+                             @Valid @RequestBody UserMemoryRequest body,
                              HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return userMemoryService.update(id, principal.userId(), body.content(), body.importance(),

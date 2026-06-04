@@ -55,7 +55,7 @@ class ChannelServiceChannelRequestTest {
             "Test", "OPENAI", "deepseek", "https://api.example.com", "sk-test",
             1, 2, ChannelStatus.ACTIVE, 100, null);
 
-        Channel saved = channelService.createFromRequest(req);
+        Channel saved = channelService.createFromRequest(req, 1L);
 
         assertEquals("enc-sk-test", saved.getApiKeyEncrypted());
         assertEquals("Test", saved.getName());
@@ -68,7 +68,7 @@ class ChannelServiceChannelRequestTest {
             "Test", "OPENAI", null, "https://api.example.com", "  ",
             null, null, null, null, null);
 
-        GatewayException ex = assertThrows(GatewayException.class, () -> channelService.createFromRequest(req));
+        GatewayException ex = assertThrows(GatewayException.class, () -> channelService.createFromRequest(req, 1L));
         assertEquals(GatewayError.INVALID_REQUEST, ex.getError());
     }
 

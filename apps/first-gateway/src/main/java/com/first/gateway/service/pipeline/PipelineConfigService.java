@@ -47,7 +47,7 @@ public class PipelineConfigService {
     public PipelineConfig getByKey(String configKey, Long userId) {
         return repository.findByConfigKeyAndUserId(configKey, userId)
             .filter(c -> "USER".equals(c.getScope()))
-            .or(() -> repository.findByConfigKeyAndScopeAndUserId(configKey, "SYSTEM", null))
+            .or(() -> repository.findByConfigKeyAndScopeAndUserId(configKey, "SYSTEM", 0L))
             .orElseThrow(() -> new GatewayException(GatewayError.INVALID_REQUEST, "pipeline config not found"));
     }
 

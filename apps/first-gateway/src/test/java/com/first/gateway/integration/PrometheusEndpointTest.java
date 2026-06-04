@@ -1,6 +1,7 @@
 package com.first.gateway.integration;
 
 import com.first.gateway.service.monitor.MonitoringService;
+import com.first.gateway.support.RedisIntegrationSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,7 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("dev")
-class PrometheusEndpointTest {
+class PrometheusEndpointTest extends RedisIntegrationSupport {
 
     @Autowired
     private MockMvc mockMvc;

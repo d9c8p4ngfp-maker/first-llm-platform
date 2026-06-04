@@ -8,7 +8,6 @@ import com.first.gateway.domain.entity.UserMemory;
 import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.infra.ai.AiServiceClient;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
-import com.first.gateway.relay.adapter.OpenAiAdapter;
 import com.first.gateway.relay.router.ChannelSelector;
 import com.first.gateway.service.pipeline.PipelineConfigService;
 import org.slf4j.Logger;
@@ -16,31 +15,31 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Service
 public class MemoryExtractionService {
 
     private static final Logger log = LoggerFactory.getLogger(MemoryExtractionService.class);
 
-    private static final Pattern JSON_FENCE = Pattern.compile("```(?:json)?\\s*([\\s\\S]*?)```", Pattern.CASE_INSENSITIVE);
+    private static final int MAX_EXISTING_MEMORIES = 30;
+    private static final double DEFAULT_MEMORY_TEMPERATURE = 0.2;
+    private static final int DEFAULT_MEMORY_MAX_TOKENS = 2000;
 
     private final UserMemoryService memoryService;
     private final UserProfileService profileService;
     private final PipelineConfigService pipelineConfigService;
     private final ProfileSynthesisService synthesisService;
     private final ChannelSelector channelSelector;
-    private final OpenAiAdapter openAiAdapter;
     private final AiServiceClient aiServiceClient;
     private final AiServiceProperties aiServiceProperties;
     private final ChannelKeyCrypto channelKeyCrypto;
@@ -51,7 +50,6 @@ public class MemoryExtractionService {
                                     PipelineConfigService pipelineConfigService,
                                     ProfileSynthesisService synthesisService,
                                     ChannelSelector channelSelector,
-                                    OpenAiAdapter openAiAdapter,
                                     AiServiceClient aiServiceClient,
                                     AiServiceProperties aiServiceProperties,
                                     ChannelKeyCrypto channelKeyCrypto,
@@ -61,7 +59,6 @@ public class MemoryExtractionService {
         this.pipelineConfigService = pipelineConfigService;
         this.synthesisService = synthesisService;
         this.channelSelector = channelSelector;
-        this.openAiAdapter = openAiAdapter;
         this.aiServiceClient = aiServiceClient;
         this.aiServiceProperties = aiServiceProperties;
         this.channelKeyCrypto = channelKeyCrypto;
@@ -77,7 +74,7 @@ public class MemoryExtractionService {
             PipelineConfig config;
             try {
                 config = pipelineConfigService.getByKey("memory.extraction", userId);
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 log.debug("No memory.extraction pipeline config found, skipping");
                 return;
             }
@@ -88,15 +85,11 @@ public class MemoryExtractionService {
             }
 
             List<UserMemory> existing = memoryService.listForUser(userId, null);
-            String existingSummary = formatExistingSummary(existing);
 
-            String conversationSegment = "## User message (primary source):\n" + userMessage
-                + "\n\n## Assistant reply (context only, do not extract assistant jokes):\n" + assistantMessage;
-
-            String promptText = getDefaultExtractionPrompt(LocalDate.now());
+            String promptText = pipelineConfigService.getPromptText("memory.extraction", userId);
 
             List<Map<String, Object>> items = callExtraction(config, userId, existing, userMessage,
-                assistantMessage, existingSummary, conversationSegment, promptText);
+                assistantMessage, promptText);
 
             if (items == null || items.isEmpty()) {
                 log.info("No memories extracted for user {}", userId);
@@ -130,8 +123,7 @@ public class MemoryExtractionService {
                     if (schedDate != null && !schedDate.isBlank() && !"null".equals(schedDate)) {
                         try {
                             memory.setScheduleDate(LocalDate.parse(schedDate));
-                        } catch (Exception ignored) {}
-                    }
+                        } catch (DateTimeParseException ignored) {}
                     memory.setScheduleTime((String) item.get("schedule_time"));
 
                     Object numVal = item.get("numeric_value");
@@ -141,7 +133,7 @@ public class MemoryExtractionService {
                     memory.setStatus("ACTIVE");
                     memoryService.createFromExtraction(memory);
                     created++;
-                } catch (Exception e) {
+                } catch (RuntimeException e) {
                     log.warn("Failed to process extraction item: {}", e.getMessage());
                 }
             }
@@ -154,7 +146,7 @@ public class MemoryExtractionService {
                 log.info("No memories saved for user {} (parsed {} items, skipped {} duplicates)",
                     userId, items.size(), skippedDuplicate);
             }
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Memory extraction failed for user {}: {}", userId, e.getMessage(), e);
         }
     }
@@ -162,8 +154,6 @@ public class MemoryExtractionService {
     private List<Map<String, Object>> callExtraction(PipelineConfig config, Long userId,
                                                       List<UserMemory> existing,
                                                       String userMessage, String assistantMessage,
-                                                      String existingSummary,
-                                                      String conversationSegment,
                                                       String promptText) {
         if (aiServiceProperties.isMemoryExtraction() && aiServiceClient.isHealthy()) {
             Optional<List<Map<String, Object>>> viaPython = callExtractionViaPython(
@@ -172,13 +162,9 @@ public class MemoryExtractionService {
                 log.info("Memory extraction via first-ai-service for user {}", userId);
                 return viaPython.get();
             }
-            log.warn("Python memory extraction unavailable, falling back to Java for user {}", userId);
         }
-        String llmResponse = callExtractionModelJava(config, userId, existingSummary, conversationSegment, promptText);
-        if (llmResponse == null || llmResponse.isBlank()) {
-            return Collections.emptyList();
-        }
-        return parseExtractionResult(llmResponse);
+        log.error("Memory extraction unavailable for user {}", userId);
+        return Collections.emptyList();
     }
 
     private Optional<List<Map<String, Object>>> callExtractionViaPython(PipelineConfig config, Long userId,
@@ -211,7 +197,7 @@ public class MemoryExtractionService {
             body.put("upstream", upstream);
 
             return aiServiceClient.extractMemories(body);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.warn("callExtractionViaPython failed: {}", e.getMessage());
             return Optional.empty();
         }
@@ -219,7 +205,7 @@ public class MemoryExtractionService {
 
     private List<Map<String, Object>> formatExistingForPython(List<UserMemory> memories) {
         List<Map<String, Object>> list = new ArrayList<>();
-        int limit = Math.min(memories.size(), 30);
+        int limit = Math.min(memories.size(), MAX_EXISTING_MEMORIES);
         for (int i = 0; i < limit; i++) {
             UserMemory m = memories.get(i);
             Map<String, Object> row = new LinkedHashMap<>();
@@ -233,84 +219,13 @@ public class MemoryExtractionService {
 
     private Map<String, Object> parseModelParams(String modelParamsJson) {
         if (modelParamsJson == null || modelParamsJson.isBlank()) {
-            return Map.of("temperature", 0.2, "max_tokens", 2000);
+            return Map.of("temperature", DEFAULT_MEMORY_TEMPERATURE, "max_tokens", DEFAULT_MEMORY_MAX_TOKENS);
         }
         try {
             return objectMapper.readValue(modelParamsJson, new TypeReference<>() {});
-        } catch (Exception e) {
-            return Map.of("temperature", 0.2, "max_tokens", 2000);
+        } catch (IOException e) {
+            return Map.of("temperature", DEFAULT_MEMORY_TEMPERATURE, "max_tokens", DEFAULT_MEMORY_MAX_TOKENS);
         }
-    }
-
-    private String callExtractionModelJava(PipelineConfig config, Long userId, String existingSummary,
-                                        String conversationSegment, String promptText) {
-        String model = config.getModelId() != null && !config.getModelId().isBlank()
-            ? config.getModelId() : "deepseek-chat";
-        String systemPrompt = promptText != null && !promptText.isBlank()
-            ? promptText : getDefaultExtractionPrompt(LocalDate.now());
-        String userContent = "## Existing memories:\n" + existingSummary
-            + "\n\n## Conversation:\n" + conversationSegment;
-        try {
-            Channel channel = channelSelector.selectForModel(model, userId);
-            Map<String, Object> response = openAiAdapter.chat(channel, Map.of(
-                "model", model,
-                "messages", List.of(
-                    Map.of("role", "system", "content", systemPrompt),
-                    Map.of("role", "user", "content", userContent)
-                ),
-                "temperature", 0.2,
-                "max_tokens", 2000
-            ));
-            return extractAssistantContent(response);
-        } catch (Exception e) {
-            log.warn("Memory extraction LLM call failed for user {}: {}", userId, e.getMessage());
-            return "[]";
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private String extractAssistantContent(Map<String, Object> response) {
-        Object choicesObj = response.get("choices");
-        if (!(choicesObj instanceof List<?> choices) || choices.isEmpty()) {
-            return "[]";
-        }
-        Object first = choices.getFirst();
-        if (!(first instanceof Map<?, ?> choice)) {
-            return "[]";
-        }
-        Object messageObj = choice.get("message");
-        if (!(messageObj instanceof Map<?, ?> message)) {
-            return "[]";
-        }
-        Object content = message.get("content");
-        return content != null ? content.toString().trim() : "[]";
-    }
-
-    private List<Map<String, Object>> parseExtractionResult(String json) {
-        String normalized = normalizeJsonPayload(json);
-        try {
-            return objectMapper.readValue(normalized, new TypeReference<>() {});
-        } catch (Exception e) {
-            log.warn("Failed to parse extraction JSON: {}", e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-
-    private static String normalizeJsonPayload(String json) {
-        if (json == null || json.isBlank()) {
-            return "[]";
-        }
-        String trimmed = json.trim();
-        Matcher matcher = JSON_FENCE.matcher(trimmed);
-        if (matcher.find()) {
-            return matcher.group(1).trim();
-        }
-        int start = trimmed.indexOf('[');
-        int end = trimmed.lastIndexOf(']');
-        if (start >= 0 && end > start) {
-            return trimmed.substring(start, end + 1);
-        }
-        return trimmed;
     }
 
     private boolean isDuplicate(String content, List<UserMemory> existing) {
@@ -321,41 +236,5 @@ public class MemoryExtractionService {
             }
         }
         return false;
-    }
-
-    private String formatExistingSummary(List<UserMemory> memories) {
-        if (memories.isEmpty()) return "No existing memories";
-        StringBuilder sb = new StringBuilder();
-        int limit = Math.min(memories.size(), 30);
-        for (int i = 0; i < limit; i++) {
-            UserMemory m = memories.get(i);
-            sb.append("- [").append(m.getCategory()).append("]");
-            if (m.getScheduleDate() != null) {
-                sb.append(" date=").append(m.getScheduleDate());
-            }
-            if (m.getScheduleTime() != null) {
-                sb.append(" time=").append(m.getScheduleTime());
-            }
-            sb.append(" ").append(m.getContent()).append("\n");
-        }
-        return sb.toString();
-    }
-
-    private String getDefaultExtractionPrompt(LocalDate today) {
-        return "You are an information extraction expert. Extract structured memories from user conversations.\n"
-            + "Today's date is " + today + ". Resolve relative dates (today/tomorrow/\u540e\u5929/\u5468\u672b) against this date.\n"
-            + "Rules:\n"
-            + "1. Prioritize the USER message; ignore assistant humor, emojis, and generic advice\n"
-            + "2. Extract TODO or SCHEDULE for near-term plans even without exact clock time "
-            + "(e.g. \u4e00\u4f1a\u513f/\u5f85\u4f1a/\u4eca\u5929\u60f3\u5403 -> category TODO or SCHEDULE, schedule_date=today, schedule_time null)\n"
-            + "3. Extract PREFERENCE when user mentions food/taste/habit preferences\n"
-            + "4. Dedup only when same date AND same time AND same event as an existing memory; "
-            + "today eating is NOT duplicate of a different day's meal\n"
-            + "5. Skip pure greetings with no factual content\n"
-            + "Output format (strict JSON array only):\n"
-            + "[{\"category\":\"FACT|PREFERENCE|EVENT|GOAL|TODO|SCHEDULE\",\"content\":\"...\","
-            + "\"importance\":1-5,\"schedule_date\":\"YYYY-MM-DD or null\","
-            + "\"schedule_time\":\"HH:mm or null\",\"numeric_value\":null}]\n"
-            + "Return [] only when the user message contains no extractable fact, plan, or preference.";
     }
 }

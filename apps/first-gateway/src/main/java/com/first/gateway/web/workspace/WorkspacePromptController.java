@@ -9,6 +9,7 @@ import com.first.gateway.web.workspace.dto.PromptTemplateRequest;
 import com.first.gateway.web.workspace.support.WorkspaceAccess;
 import com.first.gateway.web.workspace.support.WorkspaceRequest;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -43,7 +44,7 @@ public class WorkspacePromptController {
     }
 
     @PostMapping
-    public PromptTemplate create(@RequestBody PromptTemplateRequest body, HttpServletRequest request) {
+    public PromptTemplate create(@Valid @RequestBody PromptTemplateRequest body, HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return promptTemplateService.create(
             principal.tenantId(), principal.userId(),
@@ -53,7 +54,7 @@ public class WorkspacePromptController {
 
     @PutMapping("/{id}")
     public PromptTemplate update(@PathVariable Long id,
-                                 @RequestBody PromptTemplateRequest body,
+                                 @Valid @RequestBody PromptTemplateRequest body,
                                  HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return promptTemplateService.update(

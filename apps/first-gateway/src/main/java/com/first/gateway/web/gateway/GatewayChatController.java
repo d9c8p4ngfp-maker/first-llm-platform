@@ -1,4 +1,4 @@
-package com.first.gateway.web.gateway;
+﻿package com.first.gateway.web.gateway;
 
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
@@ -9,15 +9,12 @@ import com.first.gateway.service.auth.RateLimitService;
 import com.first.gateway.service.billing.BillingCostCalculator;
 import com.first.gateway.service.channel.ChannelService;
 import com.first.gateway.service.relay.RelayService;
+import com.first.gateway.web.support.ChatEndpointSupport;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,19 +45,7 @@ public class GatewayChatController {
         boolean stream = Boolean.TRUE.equals(body.get("stream"));
         long tpmReserved = tpmReserved(request);
         if (stream) {
-            return new StreamingResponseBody() {
-                @Override
-                public void writeTo(OutputStream outputStream) throws IOException {
-                    relayService.chatCompletionsStream(auth, body, tpmReserved, chunk -> {
-                        try {
-                            outputStream.write(chunk.getBytes(StandardCharsets.UTF_8));
-                            outputStream.flush();
-                        } catch (IOException ex) {
-                            throw new GatewayException(GatewayError.INTERNAL_ERROR);
-                        }
-                    });
-                }
-            };
+            return ChatEndpointSupport.buildStreamingResponse(relayService, auth, body, tpmReserved);
         }
         return relayService.chatCompletions(auth, body, tpmReserved(request));
     }

@@ -12,11 +12,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
 public class ConversationService {
+
+    private static final Set<String> ALLOWED_MESSAGE_ROLES = Set.of("user", "assistant");
 
     private final ConversationRepository conversationRepository;
     private final ConversationMessageRepository messageRepository;
@@ -74,6 +77,9 @@ public class ConversationService {
     @Transactional
     public ConversationMessage appendMessage(Long conversationId, Long tenantId, Long userId,
                                              String role, String content) {
+        if (role == null || !ALLOWED_MESSAGE_ROLES.contains(role.toLowerCase())) {
+            throw new GatewayException(GatewayError.INVALID_REQUEST, "Invalid message role");
+        }
         Conversation conversation = requireByTenant(conversationId, tenantId);
         ConversationMessage message = new ConversationMessage();
         message.setConversationId(conversation.getId());

@@ -6,6 +6,7 @@ import com.first.gateway.web.workspace.dto.ModelPreferencesRequest;
 import com.first.gateway.web.workspace.support.WorkspaceAccess;
 import com.first.gateway.web.workspace.support.WorkspaceRequest;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -34,7 +35,7 @@ public class WorkspaceModelController {
     }
 
     @PutMapping("/preferences")
-    public Map<String, Object> savePreferences(@RequestBody ModelPreferencesRequest body,
+    public Map<String, Object> savePreferences(@Valid @RequestBody ModelPreferencesRequest body,
                                                HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return preferenceService.saveModelPreferences(principal.userId(), body.defaultModel());

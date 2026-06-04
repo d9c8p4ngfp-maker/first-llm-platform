@@ -2,15 +2,43 @@ services:
   first-ai-service:
     build: ./apps/first-ai-service
     container_name: first-ai-service
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       LOG_LEVEL: ${AI_LOG_LEVEL:-info}
+      AI_SERVICE_INTERNAL_TOKEN: ${AI_SERVICE_INTERNAL_TOKEN:-compose-internal-ai-token-32chars-min}
+      PG_HOST: pgvector
+      PG_PORT: "5432"
+      PG_DB: first_rag
+      PG_USER: rag
+      PG_PASSWORD: ${PG_PASSWORD:-changeme}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 15s
+    depends_on:
+      pgvector:
+        condition: service_healthy
+    restart: unless-stopped
+
+  pgvector:
+    image: pgvector/pgvector:pg16
+    container_name: first-pgvector
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: first_rag
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-changeme}
+    volumes:
+      - D:/first/_local/data/pgvector:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d first_rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
       start_period: 15s
     restart: unless-stopped
 
@@ -24,16 +52,22 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/first_gateway?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai
       SPRING_DATASOURCE_USERNAME: gateway
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-changeme}
-      JWT_SECRET: ${JWT_SECRET:-changeme-in-production-use-env-var-32b-min}
-      CHANNEL_KEY_SECRET: ${CHANNEL_KEY_SECRET:-changeme-in-production}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      GATEWAY_RATE_LIMIT_TYPE: redis
+      JWT_SECRET: ${JWT_SECRET:-0123456789abcdef0123456789abcdef01234567}
+      CHANNEL_KEY_SECRET: ${CHANNEL_KEY_SECRET:-a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0}
+      AI_SERVICE_INTERNAL_TOKEN: ${AI_SERVICE_INTERNAL_TOKEN:-compose-internal-ai-token-32chars-min}
       AI_SERVICE_BASE_URL: http://first-ai-service:8000
       AI_SERVICE_ENABLED: "true"
       AI_SERVICE_CHAT: "true"
       AI_SERVICE_MEMORY_EXTRACTION: "true"
       AI_SERVICE_PROFILE_SYNTHESIS: "true"
-      AI_SERVICE_RAG: "false"
+      AI_SERVICE_RAG: "true"
     depends_on:
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       first-ai-service:
         condition: service_healthy
@@ -45,11 +79,27 @@ services:
       retries: 3
       start_period: 40s
 
+  redis:
+    image: redis:7-alpine
+    container_name: first-redis
+    ports:
+      - "6379:6379"
+    expose:
+      - "6379"
+    volumes:
+      - D:/first/_local/data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   mysql:
     image: mysql:8.0
     container_name: first-mysql
-    ports:
-      - "3306:3306"
+    expose:
+      - "3306"
     environment:
       MYSQL_DATABASE: first_gateway
       MYSQL_USER: gateway

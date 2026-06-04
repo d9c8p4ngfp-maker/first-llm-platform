@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuthStore } from '@/stores/auth'
-import { TOKEN_KEY } from '@/lib/utils'
 import * as authApi from '@/api/auth'
 import { extractApiError } from '@/lib/api-error'
 import { authZh } from '@/i18n/auth-strings'
@@ -36,7 +35,6 @@ export function RegisterPage() {
   const [enabled, setEnabled] = useState(true)
 
   useEffect(() => {
-    localStorage.removeItem(TOKEN_KEY)
     useAuthStore.getState().clearSession()
     authApi.registerEnabled().then((res) => setEnabled(res.enabled)).catch(() => setEnabled(true))
   }, [])

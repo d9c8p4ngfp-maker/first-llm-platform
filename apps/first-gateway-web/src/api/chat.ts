@@ -1,8 +1,7 @@
-import { TOKEN_KEY } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth'
 
 export function getChatAccessToken(): string | null {
-  return useAuthStore.getState().token || localStorage.getItem(TOKEN_KEY)
+  return useAuthStore.getState().user ? 'cookie' : null
 }
 
 export async function streamChatCompletions(
@@ -10,8 +9,8 @@ export async function streamChatCompletions(
   onChunk: (text: string) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const token = getChatAccessToken()
-  if (!token) {
+  const authed = getChatAccessToken()
+  if (!authed) {
     throw new Error('请先登录后再发送消息')
   }
 
@@ -19,17 +18,15 @@ export async function streamChatCompletions(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(body),
     signal,
-    credentials: 'same-origin',
+    credentials: 'include',
   })
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '')
     if (res.status === 401) {
-      localStorage.removeItem(TOKEN_KEY)
       useAuthStore.getState().clearSession()
       throw new Error('登录已失效，请重新登录')
     }

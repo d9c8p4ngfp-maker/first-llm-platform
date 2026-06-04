@@ -2,6 +2,7 @@ package com.first.gateway.web.admin.support;
 
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
+import com.first.gateway.repository.UserTenantRelRepository;
 import com.first.gateway.service.auth.admin.AdminPrincipal;
 
 public final class AdminAccess {
@@ -22,11 +23,32 @@ public final class AdminAccess {
         }
     }
 
+    public static AdminPrincipal requirePlatformAdmin(AdminPrincipal principal) {
+        requirePrincipal(principal);
+        if (!principal.isPlatformAdmin()) {
+            throw new GatewayException(GatewayError.ACCESS_DENIED, "Platform admin required");
+        }
+        return principal;
+    }
+
     public static void requireSelfOrAdmin(AdminPrincipal principal, Long userId) {
         requirePrincipal(principal);
-        if (principal.isAdmin() || principal.userId().equals(userId)) {
+        if (principal.userId().equals(userId)) {
             return;
         }
-        throw new GatewayException(GatewayError.ACCESS_DENIED);
+        if (!principal.isPlatformAdmin()) {
+            throw new GatewayException(GatewayError.ACCESS_DENIED);
+        }
+    }
+
+    public static void requireSelfOrAdminInTenant(AdminPrincipal principal, Long userId,
+                                                  UserTenantRelRepository relRepository) {
+        requirePrincipal(principal);
+        if (principal.userId().equals(userId)) {
+            return;
+        }
+        requirePlatformAdmin(principal);
+        relRepository.findByUserIdAndTenantId(userId, principal.tenantId())
+            .orElseThrow(() -> new GatewayException(GatewayError.ACCESS_DENIED));
     }
 }

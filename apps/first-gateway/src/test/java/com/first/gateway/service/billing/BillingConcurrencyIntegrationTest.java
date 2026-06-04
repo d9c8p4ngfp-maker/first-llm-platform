@@ -1,5 +1,6 @@
 package com.first.gateway.service.billing;
 
+import com.first.gateway.support.RedisIntegrationSupport;
 import com.first.gateway.domain.entity.Quota;
 import com.first.gateway.domain.entity.Tenant;
 import com.first.gateway.repository.QuotaRepository;
@@ -27,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 @ActiveProfiles("dev")
-class BillingConcurrencyIntegrationTest {
+class BillingConcurrencyIntegrationTest extends RedisIntegrationSupport {
 
     @Autowired
     private TenantRepository tenantRepository;

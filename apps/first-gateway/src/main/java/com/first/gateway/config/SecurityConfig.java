@@ -26,8 +26,10 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/health", "/actuator/**", "/h2-console/**",
-                    "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                .requestMatchers("/health", "/actuator/health").permitAll()
+                .requestMatchers("/actuator/**").authenticated()
+                .requestMatchers("/h2-console/**").denyAll()
+                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").denyAll()
                 .requestMatchers("/admin/api/v1/auth/login", "/admin/api/v1/auth/login/**",
                     "/admin/api/v1/auth/register", "/admin/api/v1/auth/register/**",
                     "/admin/api/v1/auth/register-enabled", "/admin/api/v1/auth/register-enabled/**",
@@ -39,7 +41,16 @@ public class SecurityConfig {
                 .anyRequest().permitAll())
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class)
-            .headers(h -> h.frameOptions(f -> f.sameOrigin()));
+            .headers(h -> h
+                .frameOptions(f -> f.sameOrigin())
+                .contentSecurityPolicy(csp -> csp
+                    .policyDirectives("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss: http: https:"))
+                .httpStrictTransportSecurity(hsts -> hsts
+                    .includeSubDomains(true)
+                    .maxAgeInSeconds(31536000))
+                .contentTypeOptions(ct -> {})
+                .referrerPolicy(rp -> rp.policy(
+                    org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)));
         return http.build();
     }
 

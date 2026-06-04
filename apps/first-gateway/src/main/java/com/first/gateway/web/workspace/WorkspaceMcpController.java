@@ -7,6 +7,7 @@ import com.first.gateway.web.workspace.dto.McpServerRequest;
 import com.first.gateway.web.workspace.support.WorkspaceAccess;
 import com.first.gateway.web.workspace.support.WorkspaceRequest;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -35,7 +36,7 @@ public class WorkspaceMcpController {
     }
 
     @PostMapping
-    public McpServer create(@RequestBody McpServerRequest body, HttpServletRequest request) {
+    public McpServer create(@Valid @RequestBody McpServerRequest body, HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return mcpServerService.create(principal.tenantId(), principal.userId(),
             body.name(), body.endpoint(), body.transport());
@@ -43,7 +44,7 @@ public class WorkspaceMcpController {
 
     @PutMapping("/{id}")
     public McpServer update(@PathVariable Long id,
-                            @RequestBody McpServerRequest body,
+                            @Valid @RequestBody McpServerRequest body,
                             HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return mcpServerService.update(id, principal.userId(), body.name(), body.endpoint());

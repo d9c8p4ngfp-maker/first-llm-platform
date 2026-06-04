@@ -1,6 +1,7 @@
 package com.first.gateway.web.workspace;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.first.gateway.support.RedisIntegrationSupport;
 import com.first.gateway.web.admin.dto.LoginRequest;
 import com.first.gateway.web.admin.dto.RegisterRequest;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("dev")
-class WorkspaceAuthControllerTest {
+class WorkspaceAuthControllerTest extends RedisIntegrationSupport {
 
     @Autowired
     private MockMvc mockMvc;

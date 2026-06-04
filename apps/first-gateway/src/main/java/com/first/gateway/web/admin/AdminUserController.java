@@ -4,6 +4,7 @@ import com.first.gateway.domain.entity.Quota;
 import com.first.gateway.domain.entity.User;
 import com.first.gateway.infra.filter.GatewayRequestAttributes;
 import com.first.gateway.repository.UserRepository;
+import com.first.gateway.repository.UserTenantRelRepository;
 import com.first.gateway.service.auth.admin.AdminPrincipal;
 import com.first.gateway.service.user.UserService;
 import com.first.gateway.web.admin.dto.AdjustQuotaRequest;
@@ -24,30 +25,34 @@ import java.util.Map;
 public class AdminUserController {
 
     private final UserRepository userRepository;
+    private final UserTenantRelRepository userTenantRelRepository;
     private final UserService userService;
 
-    public AdminUserController(UserRepository userRepository, UserService userService) {
+    public AdminUserController(UserRepository userRepository,
+                               UserTenantRelRepository userTenantRelRepository,
+                               UserService userService) {
         this.userRepository = userRepository;
+        this.userTenantRelRepository = userTenantRelRepository;
         this.userService = userService;
     }
 
     @GetMapping
     public List<User> list(HttpServletRequest request) {
-        AdminAccess.requireAdmin(AdminAccess.requirePrincipal(principal(request)));
-        return userRepository.findAll();
+        AdminPrincipal p = AdminAccess.requirePlatformAdmin(AdminAccess.requirePrincipal(principal(request)));
+        return userTenantRelRepository.findUsersByTenantId(p.tenantId());
     }
 
     @GetMapping("/{id}")
     public User get(@PathVariable Long id, HttpServletRequest request) {
         AdminPrincipal principal = AdminAccess.requirePrincipal(principal(request));
-        AdminAccess.requireSelfOrAdmin(principal, id);
+        AdminAccess.requireSelfOrAdminInTenant(principal, id, userTenantRelRepository);
         return userRepository.findById(id)
             .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("User not found"));
     }
 
     @PostMapping
     public User create(@Valid @RequestBody CreateUserRequest body, HttpServletRequest request) {
-        AdminAccess.requireAdmin(AdminAccess.requirePrincipal(principal(request)));
+        AdminAccess.requirePlatformAdmin(AdminAccess.requirePrincipal(principal(request)));
         return userService.createUser(body.username(), body.password(), body.email(), body.groupId());
     }
 
@@ -55,7 +60,7 @@ public class AdminUserController {
     public User update(@PathVariable Long id,
                        @RequestBody UpdateUserRequest body,
                        HttpServletRequest request) {
-        AdminAccess.requireAdmin(AdminAccess.requirePrincipal(principal(request)));
+        AdminAccess.requirePlatformAdmin(AdminAccess.requirePrincipal(principal(request)));
         return userService.updateUser(id, body.email(), body.groupId());
     }
 
@@ -63,7 +68,7 @@ public class AdminUserController {
     public User updateStatus(@PathVariable Long id,
                              @Valid @RequestBody UpdateUserStatusRequest body,
                              HttpServletRequest request) {
-        AdminAccess.requireAdmin(AdminAccess.requirePrincipal(principal(request)));
+        AdminAccess.requirePlatformAdmin(AdminAccess.requirePrincipal(principal(request)));
         return userService.updateStatus(id, body.status());
     }
 
@@ -71,7 +76,7 @@ public class AdminUserController {
     public Map<String, Object> adjustQuota(@PathVariable Long id,
                                            @Valid @RequestBody AdjustQuotaRequest body,
                                            HttpServletRequest request) {
-        AdminAccess.requireAdmin(AdminAccess.requirePrincipal(principal(request)));
+        AdminAccess.requirePlatformAdmin(AdminAccess.requirePrincipal(principal(request)));
         Quota quota = userService.adjustUserQuota(id, body.totalTokens());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("tenantId", quota.getTenantId());

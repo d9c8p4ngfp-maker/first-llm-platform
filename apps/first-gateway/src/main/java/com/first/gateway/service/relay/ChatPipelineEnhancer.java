@@ -2,6 +2,7 @@ package com.first.gateway.service.relay;
 
 import com.first.gateway.domain.entity.*;
 import com.first.gateway.repository.*;
+import com.first.gateway.config.AiServiceProperties;
 import com.first.gateway.service.pipeline.PipelineConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,24 +20,32 @@ public class ChatPipelineEnhancer {
     private final PromptTemplateRepository promptTemplateRepository;
     private final PromptVersionRepository promptVersionRepository;
     private final UserProfileRepository userProfileRepository;
-    private final PipelineConfigService pipelineConfigService;
+        private final PipelineConfigService pipelineConfigService;
+    private final AiServiceProperties aiServiceProperties;
 
     public ChatPipelineEnhancer(SkillRepository skillRepository,
                                  SkillBindingRepository skillBindingRepository,
                                  PromptTemplateRepository promptTemplateRepository,
                                  PromptVersionRepository promptVersionRepository,
                                  UserProfileRepository userProfileRepository,
-                                 PipelineConfigService pipelineConfigService) {
+                                                                  PipelineConfigService pipelineConfigService,
+                                 AiServiceProperties aiServiceProperties) {
         this.skillRepository = skillRepository;
         this.skillBindingRepository = skillBindingRepository;
         this.promptTemplateRepository = promptTemplateRepository;
         this.promptVersionRepository = promptVersionRepository;
         this.userProfileRepository = userProfileRepository;
         this.pipelineConfigService = pipelineConfigService;
+        this.aiServiceProperties = aiServiceProperties;
     }
 
     @SuppressWarnings("unchecked")
     public Map<String, Object> enhance(Map<String, Object> request, Long userId, Long tenantId) {
+        // When the Python AI service handles chat, skip Java-side context assembly
+        // to avoid dual system-prompt / memory / profile / RAG injection.
+        if (aiServiceProperties.isChat()) {
+            return new HashMap<>(request);
+        }
         Map<String, Object> enhanced = new HashMap<>(request);
 
         Long skillId = toLong(enhanced.remove("x_skill_id"));
@@ -49,22 +58,22 @@ public class ChatPipelineEnhancer {
 
         if (skillId != null) {
             try {
-                Skill skill = skillRepository.findById(skillId).orElse(null);
-                if (skill != null && skill.getDeleted() == 0) {
+                Skill skill = skillRepository.findByIdAndTenantIdAndDeleted(skillId, tenantId, (short) 0).orElse(null);
+                if (skill != null) {
                     if (skill.getSuggestedModel() != null && !skill.getSuggestedModel().isBlank()) {
                         modelOverride = skill.getSuggestedModel();
                     }
                     if (skill.getPromptTemplateId() != null) {
-                        appendPromptTemplate(systemPromptBuilder, skill.getPromptTemplateId(), promptVars);
+                        appendPromptTemplate(systemPromptBuilder, skill.getPromptTemplateId(), tenantId, promptVars);
                     }
                 }
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 log.warn("Failed to load skill {}: {}", skillId, e.getMessage());
             }
         }
 
         if (promptTemplateId != null) {
-            appendPromptTemplate(systemPromptBuilder, promptTemplateId, promptVars);
+            appendPromptTemplate(systemPromptBuilder, promptTemplateId, tenantId, promptVars);
         }
 
         try {
@@ -73,7 +82,7 @@ public class ChatPipelineEnhancer {
                     systemPromptBuilder.append("\n\n--- \u7528\u6237\u753b\u50cf ---\n").append(profile.getAiSystemPrompt());
                 }
             });
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.warn("Failed to load user profile for persona injection: {}", e.getMessage());
         }
 
@@ -82,7 +91,8 @@ public class ChatPipelineEnhancer {
             if (baseConfig.getPromptText() != null && !baseConfig.getPromptText().isBlank()) {
                 systemPromptBuilder.insert(0, baseConfig.getPromptText() + "\n\n");
             }
-        } catch (Exception ignored) {
+        } catch (RuntimeException e) {
+            log.warn("Failed to load chat.system_prompt_base: {}", e.getMessage());
         }
 
         if (!systemPromptBuilder.isEmpty()) {
@@ -96,9 +106,8 @@ public class ChatPipelineEnhancer {
         return enhanced;
     }
 
-    private void appendPromptTemplate(StringBuilder sb, Long templateId, Map<String, Object> vars) {
-        promptTemplateRepository.findById(templateId).ifPresent(template -> {
-            if (template.getDeleted() != 0) return;
+    private void appendPromptTemplate(StringBuilder sb, Long templateId, Long tenantId, Map<String, Object> vars) {
+        promptTemplateRepository.findByIdAndTenantIdAndDeleted(templateId, tenantId, (short) 0).ifPresent(template -> {
             promptVersionRepository.findFirstByTemplateIdOrderByCreatedAtDesc(templateId).ifPresent(version -> {
                 if (version.getSystemPrompt() != null && !version.getSystemPrompt().isBlank()) {
                     String rendered = version.getSystemPrompt();

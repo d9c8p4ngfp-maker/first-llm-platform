@@ -1,7 +1,7 @@
 from typing import Any
 
 from app.models.chat import ChatRequest
-from app.services.llm_client import chat_completion, chat_completion_stream
+from app.services.llm_client import chat_completion_stream, invoke_chat
 
 
 def _memory_block(memories: list) -> str:
@@ -72,13 +72,12 @@ def run_chat(req: ChatRequest):
             max_tokens=params.max_tokens,
             tools=req.tools,
         )
-    data, _usage = chat_completion(
+    data = invoke_chat(
         base_url=req.upstream.base_url,
         api_key=req.upstream.api_key,
         model=model,
         messages=messages,
         temperature=params.temperature,
         max_tokens=params.max_tokens,
-        tools=req.tools,
     )
     return data

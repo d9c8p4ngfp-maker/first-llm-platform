@@ -6,6 +6,7 @@ import {
   Outlet,
 } from '@tanstack/react-router'
 import { AppLayout } from '@/components/layout/AppLayout'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { ChatPage } from '@/pages/chat/ChatPage'
@@ -24,17 +25,22 @@ import { McpPage } from '@/pages/tools/McpPage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { PipelinePage } from '@/pages/settings/PipelinePage'
-import { TOKEN_KEY } from '@/lib/utils'
+import { NotFoundPage } from '@/pages/NotFoundPage'
+import { useAuthStore } from '@/stores/auth'
 
 function requireAuth() {
-  const token = localStorage.getItem(TOKEN_KEY)
-  if (!token) {
+  if (!useAuthStore.getState().user) {
     throw redirect({ to: '/login' })
   }
 }
 
 const rootRoute = createRootRoute({
-  component: () => <Outlet />,
+  component: () => (
+    <ErrorBoundary>
+      <Outlet />
+    </ErrorBoundary>
+  ),
+  notFoundComponent: NotFoundPage,
 })
 
 const loginRoute = createRoute({
@@ -42,7 +48,7 @@ const loginRoute = createRoute({
   path: '/login',
   component: LoginPage,
   beforeLoad: () => {
-    if (localStorage.getItem(TOKEN_KEY)) {
+    if (useAuthStore.getState().user) {
       throw redirect({ to: '/chat' })
     }
   },
@@ -53,7 +59,7 @@ const registerRoute = createRoute({
   path: '/register',
   component: RegisterPage,
   beforeLoad: () => {
-    if (localStorage.getItem(TOKEN_KEY)) {
+    if (useAuthStore.getState().user) {
       throw redirect({ to: '/chat' })
     }
   },
@@ -182,7 +188,7 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   beforeLoad: () => {
-    throw redirect({ to: localStorage.getItem(TOKEN_KEY) ? '/chat' : '/login' })
+    throw redirect({ to: useAuthStore.getState().user ? '/chat' : '/login' })
   },
 })
 

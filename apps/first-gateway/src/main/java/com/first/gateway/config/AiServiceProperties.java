@@ -13,9 +13,10 @@ public class AiServiceProperties {
     private boolean chat = true;
     private boolean memoryExtraction = true;
     private boolean profileSynthesis = true;
-    private boolean rag = false;
+    private boolean rag = true;
     private String baseUrl = "http://localhost:8000";
     private String embeddingModel = "text-embedding-3-small";
+    private String internalToken = "";
     private int connectTimeoutMs = 5000;
     private int readTimeoutMs = 120000;
     private int streamReadTimeoutMs = 300000;

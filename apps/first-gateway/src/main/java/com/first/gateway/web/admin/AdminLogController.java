@@ -27,8 +27,7 @@ public class AdminLogController {
     }
 
     @GetMapping
-    public Page<TokenUsageLog> list(@RequestParam(required = false) Long tenantId,
-                                    @RequestParam(required = false) Long apiKeyId,
+    public Page<TokenUsageLog> list(@RequestParam(required = false) Long apiKeyId,
                                     @RequestParam(required = false) String model,
                                     @RequestParam(required = false) String status,
                                     @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
@@ -36,11 +35,8 @@ public class AdminLogController {
                                     @RequestParam(defaultValue = "0") int page,
                                     @RequestParam(defaultValue = "20") int size,
                                     HttpServletRequest request) {
-        AdminPrincipal principal = AdminAccess.requirePrincipal(principal(request));
-        if (!principal.isAdmin()) {
-            tenantId = principal.tenantId();
-        }
-        return logQueryService.search(tenantId, apiKeyId, model, status, startDate, endDate,
+        AdminPrincipal p = AdminAccess.requirePlatformAdmin(AdminAccess.requirePrincipal(principal(request)));
+        return logQueryService.search(p.tenantId(), apiKeyId, model, status, startDate, endDate,
             PageRequest.of(page, size));
     }
 

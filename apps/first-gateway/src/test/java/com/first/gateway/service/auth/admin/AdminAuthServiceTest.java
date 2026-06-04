@@ -22,6 +22,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -46,7 +47,8 @@ class AdminAuthServiceTest {
         AuthProperties properties = new AuthProperties();
         properties.setSecret("test-jwt-secret-at-least-32-bytes-long");
         properties.setExpireHours(24);
-        JwtService jwtService = new JwtService(properties);
+        JwtBlacklistStore blacklistStore = mock(JwtBlacklistStore.class);
+        JwtService jwtService = new JwtService(properties, blacklistStore);
         adminAuthService = new AdminAuthService(
             userRepository, userTenantRelRepository, userService, systemConfigService, passwordEncoder, jwtService);
     }

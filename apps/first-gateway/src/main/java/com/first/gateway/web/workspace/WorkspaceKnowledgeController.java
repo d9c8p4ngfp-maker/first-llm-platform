@@ -9,6 +9,7 @@ import com.first.gateway.web.workspace.dto.KnowledgeDocumentRequest;
 import com.first.gateway.web.workspace.support.WorkspaceAccess;
 import com.first.gateway.web.workspace.support.WorkspaceRequest;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,7 +32,7 @@ public class WorkspaceKnowledgeController {
     }
 
     @PostMapping
-    public KnowledgeBase create(@RequestBody KnowledgeBaseRequest body, HttpServletRequest request) {
+    public KnowledgeBase create(@Valid @RequestBody KnowledgeBaseRequest body, HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return knowledgeBaseService.create(principal.tenantId(), body.name(), body.description());
     }
@@ -44,7 +45,7 @@ public class WorkspaceKnowledgeController {
 
     @PutMapping("/{id}")
     public KnowledgeBase update(@PathVariable Long id,
-                                @RequestBody KnowledgeBaseRequest body,
+                                @Valid @RequestBody KnowledgeBaseRequest body,
                                 HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return knowledgeBaseService.update(id, principal.tenantId(), body.name(), body.description());
@@ -65,7 +66,7 @@ public class WorkspaceKnowledgeController {
 
     @PostMapping("/{id}/documents")
     public KnowledgeDocument createDocument(@PathVariable Long id,
-                                         @RequestBody KnowledgeDocumentRequest body,
+                                         @Valid @RequestBody KnowledgeDocumentRequest body,
                                          HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         return knowledgeBaseService.createDocument(id, principal.tenantId(), principal.userId(), body.title(), body.content());

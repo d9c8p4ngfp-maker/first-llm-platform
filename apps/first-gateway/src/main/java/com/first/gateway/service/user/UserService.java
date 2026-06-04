@@ -76,7 +76,7 @@ public class UserService {
         UserTenantRel rel = new UserTenantRel();
         rel.setUserId(user.getId());
         rel.setTenantId(tenant.getId());
-        rel.setRole("OWNER");
+        rel.setRole("MEMBER");
         userTenantRelRepository.save(rel);
 
         long defaultQuota = systemConfigService.getLong("quota_for_new_user", 100_000L);
@@ -139,9 +139,17 @@ public class UserService {
             .orElseThrow(() -> new GatewayException(GatewayError.INVALID_REQUEST, "group not found"));
     }
 
+    private static final int MIN_PASSWORD_LENGTH = 12;
+    private static final String PASSWORD_PATTERN = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).+$";
+
     private static void validatePassword(String password) {
-        if (password == null || password.length() < 6) {
-            throw new GatewayException(GatewayError.INVALID_REQUEST, "password must be at least 6 characters");
+        if (password == null || password.length() < MIN_PASSWORD_LENGTH) {
+            throw new GatewayException(GatewayError.INVALID_REQUEST,
+                "Password must be at least " + MIN_PASSWORD_LENGTH + " characters");
+        }
+        if (!password.matches(PASSWORD_PATTERN)) {
+            throw new GatewayException(GatewayError.INVALID_REQUEST,
+                "Password must contain at least one uppercase letter, one lowercase letter and one digit");
         }
     }
 }

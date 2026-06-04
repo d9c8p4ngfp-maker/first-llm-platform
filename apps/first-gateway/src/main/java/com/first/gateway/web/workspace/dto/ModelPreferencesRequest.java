@@ -1,3 +1,8 @@
 package com.first.gateway.web.workspace.dto;
 
-public record ModelPreferencesRequest(String defaultModel) {}
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+public record ModelPreferencesRequest(
+    @NotBlank @Size(max = 100) String defaultModel
+) {}

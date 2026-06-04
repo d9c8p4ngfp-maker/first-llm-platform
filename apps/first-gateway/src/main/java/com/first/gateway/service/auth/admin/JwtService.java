@@ -19,20 +19,23 @@ public class JwtService {
 
     private final AuthProperties authProperties;
     private final SecretKey secretKey;
+    private final JwtBlacklistStore blacklistStore;
 
-    public JwtService(AuthProperties authProperties) {
+    public JwtService(AuthProperties authProperties, JwtBlacklistStore blacklistStore) {
         this.authProperties = authProperties;
         byte[] keyBytes = authProperties.getSecret().getBytes(StandardCharsets.UTF_8);
         if (keyBytes.length < 32) {
             throw new IllegalStateException("auth.jwt.secret must be at least 32 bytes");
         }
         this.secretKey = Keys.hmacShaKeyFor(keyBytes);
+        this.blacklistStore = blacklistStore;
     }
 
     public String createToken(AdminPrincipal principal) {
         Instant now = Instant.now();
         Instant expiresAt = now.plus(authProperties.getExpireHours(), ChronoUnit.HOURS);
         return Jwts.builder()
+            .id(java.util.UUID.randomUUID().toString())
             .subject(String.valueOf(principal.userId()))
             .claim("tenantId", principal.tenantId())
             .claim("username", principal.username())
@@ -63,5 +66,38 @@ public class JwtService {
 
     public long expiresInSeconds() {
         return authProperties.getExpireHours() * 3600L;
+    }
+
+    public void blacklist(String token) {
+        try {
+            Claims claims = parseClaims(token);
+            long ttl = claims.getExpiration().getTime() - System.currentTimeMillis();
+            if (ttl > 0) {
+                blacklistStore.push(claims.getId(), ttl);
+            }
+        } catch (GatewayException e) {
+            throw e;
+        } catch (Exception ignored) {
+            // token already invalid, nothing to blacklist
+        }
+    }
+
+    public boolean isBlacklisted(String token) {
+        try {
+            Claims claims = parseClaims(token);
+            return blacklistStore.contains(claims.getId());
+        } catch (GatewayException e) {
+            throw e;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parser()
+            .verifyWith(secretKey)
+            .build()
+            .parseSignedClaims(token)
+            .getPayload();
     }
 }

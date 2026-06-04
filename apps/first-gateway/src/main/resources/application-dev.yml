@@ -1,10 +1,10 @@
 spring:
   config:
     import: optional:file:../../../.env
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
   datasource:
     url: jdbc:mysql://localhost:3306/first_gateway?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai
     username: ${DB_USERNAME:gateway}
@@ -32,9 +32,11 @@ logging:
 auth:
   jwt:
     secret: dev-jwt-secret-change-me-at-least-32-bytes-long
-    expire-hours: 24
+    expire-hours: 2
 
 gateway:
+  rate-limit:
+    type: redis
   crypto:
     channel-key-secret: ${CHANNEL_KEY_SECRET:dev-channel-key-secret}
   upstream:
@@ -45,10 +47,11 @@ ai-service:
   chat: true
   memory-extraction: true
   profile-synthesis: true
-  rag: false
+  rag: true
   embedding-model: text-embedding-3-small
   stream-read-timeout-ms: 300000
   base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
+  internal-token: ${AI_SERVICE_INTERNAL_TOKEN:compose-internal-ai-token-32chars-min}
   connect-timeout-ms: 5000
   read-timeout-ms: 120000
   retry:

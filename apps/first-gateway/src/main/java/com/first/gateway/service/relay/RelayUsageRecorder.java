@@ -14,6 +14,8 @@ import com.first.gateway.service.monitor.ApiRequestLogger;
 import com.first.gateway.service.monitor.MonitoringService;
 import com.first.gateway.service.notification.NotificationService;
 import com.first.gateway.service.stats.RedisStatsService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,8 @@ import java.time.Instant;
 
 @Service
 public class RelayUsageRecorder {
+
+    private static final Logger log = LoggerFactory.getLogger(RelayUsageRecorder.class);
 
     private final BillingService billingService;
     private final LogService logService;
@@ -83,7 +87,7 @@ public class RelayUsageRecorder {
         if (notificationService != null) {
             try {
                 notificationService.publishStatsUpdate(auth.user().getId(), 0, totalTokens, 0);
-            } catch (Exception ignored) {}
+            } catch (RuntimeException e) { log.warn("Failed to publish stats update: {}", e.getMessage()); }
         }
     }
 

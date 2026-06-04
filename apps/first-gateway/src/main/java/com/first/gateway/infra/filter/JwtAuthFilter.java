@@ -60,6 +60,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
         try {
             String rawJwt = ApiKeyAuthFilter.extractBearerToken(request.getHeader("Authorization"));
+            if (rawJwt == null) {
+                rawJwt = extractTokenFromCookie(request);
+            }
+            if (rawJwt == null) {
+                throw new GatewayException(com.first.gateway.infra.error.GatewayError.UNAUTHORIZED, "missing token");
+            }
             AdminPrincipal principal = adminAuthService.authenticate(rawJwt);
             request.setAttribute(GatewayRequestAttributes.ADMIN_PRINCIPAL, principal);
             var authentication = new UsernamePasswordAuthenticationToken(
@@ -69,6 +75,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         } catch (GatewayException ex) {
             FilterErrorWriter.write(objectMapper, response, ex);
         }
+    }
+
+    private static String extractTokenFromCookie(HttpServletRequest request) {
+        jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (jakarta.servlet.http.Cookie c : cookies) {
+                if ("access_token".equals(c.getName())) {
+                    return c.getValue();
+                }
+            }
+        }
+        return null;
     }
 
     static boolean isPublicAuthPath(String path) {
