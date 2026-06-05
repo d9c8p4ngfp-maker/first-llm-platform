@@ -3,6 +3,7 @@ package com.first.gateway.service.scheduler;
 import com.first.gateway.domain.entity.UserMemory;
 import com.first.gateway.domain.enums.MemoryCategory;
 import com.first.gateway.domain.enums.MemoryStatus;
+import com.first.gateway.repository.AsyncTaskRepository;
 import com.first.gateway.repository.UserMemoryRepository;
 import com.first.gateway.service.notification.NotificationService;
 import org.slf4j.Logger;
@@ -25,11 +26,14 @@ public class ScheduledTasks {
 
     private final UserMemoryRepository memoryRepository;
     private final NotificationService notificationService;
+    private final AsyncTaskRepository asyncTaskRepository;
 
     public ScheduledTasks(UserMemoryRepository memoryRepository,
-                           NotificationService notificationService) {
+                           NotificationService notificationService,
+                           AsyncTaskRepository asyncTaskRepository) {
         this.memoryRepository = memoryRepository;
         this.notificationService = notificationService;
+        this.asyncTaskRepository = asyncTaskRepository;
     }
 
     @Scheduled(fixedDelay = 60_000)
@@ -71,5 +75,12 @@ public class ScheduledTasks {
         if (deleted > 0) {
             log.info("Cleaned up {} old memory records", deleted);
         }
+    }
+
+    @Scheduled(cron = "0 0 4 * * *")
+    public void cleanupOldAsyncTasks() {
+        int deleted = asyncTaskRepository.deleteByStatusAndFinishedAtBefore(
+            "DONE", Instant.now().minus(Duration.ofDays(30)));
+        if (deleted > 0) log.info("Cleaned up {} old async tasks", deleted);
     }
 }

@@ -5,6 +5,10 @@ server:
 spring:
   application:
     name: first-gateway
+  task:
+    scheduling:
+      pool:
+        size: 3
   profiles:
     active: dev
   lifecycle:

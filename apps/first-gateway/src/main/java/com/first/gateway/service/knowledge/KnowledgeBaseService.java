@@ -1,6 +1,7 @@
 package com.first.gateway.service.knowledge;
 
 import com.first.gateway.config.AiServiceProperties;
+import com.first.gateway.domain.entity.AsyncTask;
 import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.domain.entity.KnowledgeBase;
@@ -8,19 +9,18 @@ import com.first.gateway.domain.entity.KnowledgeDocument;
 import com.first.gateway.domain.enums.SourceType;
 import com.first.gateway.domain.enums.SyncStatus;
 import com.first.gateway.infra.ai.AiServiceClient;
-import com.first.gateway.infra.ai.dto.RagIndexRequest;
 import com.first.gateway.infra.ai.dto.RagQueryRequest;
 import com.first.gateway.infra.ai.dto.UpstreamConfig;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
+import com.first.gateway.repository.AsyncTaskRepository;
 import com.first.gateway.repository.ChannelModelRepository;
 import com.first.gateway.repository.ChannelRepository;
 import com.first.gateway.repository.KnowledgeBaseRepository;
 import com.first.gateway.repository.KnowledgeDocumentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +28,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 @Service
 @Transactional(readOnly = true)
@@ -43,6 +42,7 @@ public class KnowledgeBaseService {
     private final ChannelRepository channelRepository;
     private final ChannelModelRepository channelModelRepository;
     private final ChannelKeyCrypto channelKeyCrypto;
+    private final AsyncTaskRepository asyncTaskRepository;
 
     public KnowledgeBaseService(KnowledgeBaseRepository knowledgeBaseRepository,
                                 KnowledgeDocumentRepository knowledgeDocumentRepository,
@@ -50,7 +50,8 @@ public class KnowledgeBaseService {
                                 AiServiceProperties aiServiceProperties,
                                 ChannelRepository channelRepository,
                                 ChannelModelRepository channelModelRepository,
-                                ChannelKeyCrypto channelKeyCrypto) {
+                                ChannelKeyCrypto channelKeyCrypto,
+                                AsyncTaskRepository asyncTaskRepository) {
         this.knowledgeBaseRepository = knowledgeBaseRepository;
         this.knowledgeDocumentRepository = knowledgeDocumentRepository;
         this.aiServiceClient = aiServiceClient;
@@ -58,6 +59,7 @@ public class KnowledgeBaseService {
         this.channelRepository = channelRepository;
         this.channelModelRepository = channelModelRepository;
         this.channelKeyCrypto = channelKeyCrypto;
+        this.asyncTaskRepository = asyncTaskRepository;
     }
 
     public List<KnowledgeBase> listByTenant(Long tenantId) {
@@ -123,10 +125,16 @@ public class KnowledgeBaseService {
         doc.setTitle(title != null && !title.isBlank() ? title.trim() : "Untitled");
         doc.setContent(content);
         doc.setSourceType(SourceType.MANUAL);
-        doc.setSyncStatus(SyncStatus.INDEXING);
+        doc.setSyncStatus(SyncStatus.PENDING);
         doc.setDeleted((short) 0);
         doc = knowledgeDocumentRepository.save(doc);
-        triggerIndex(kbId, doc);
+
+        AsyncTask task = new AsyncTask();
+        task.setTaskType("DOC_INDEX");
+        task.setRefId(doc.getId());
+        task.setRefExtra(kbId);
+        asyncTaskRepository.save(task);
+
         return doc;
     }
 
@@ -209,34 +217,16 @@ public class KnowledgeBaseService {
     @Transactional
     public KnowledgeDocument reindexDocument(Long kbId, Long tenantId, Long userId, Long docId) {
         KnowledgeDocument doc = requireDocument(docId, kbId, tenantId);
-        doc.setSyncStatus(SyncStatus.INDEXING);
+        doc.setSyncStatus(SyncStatus.PENDING);
         doc = knowledgeDocumentRepository.save(doc);
-        triggerIndex(kbId, doc);
-        return doc;
-    }
 
-    private void triggerIndex(Long kbId, KnowledgeDocument doc) {
-        if (!aiServiceProperties.isRag() || !aiServiceClient.isHealthy()) {
-            return;
-        }
-        CompletableFuture.runAsync(() -> {
-            try {
-                RagIndexRequest indexRequest = new RagIndexRequest(
-                    doc.getId(), kbId, doc.getContent(),
-                    null,
-                    doc.getFileType() != null ? doc.getFileType() : "TEXT",
-                    aiServiceProperties.getEmbeddingModel(),
-                    getEmbeddingUpstream());
-                aiServiceClient.indexRag(indexRequest);
-                doc.setSyncStatus(SyncStatus.INDEXED);
-                log.info("RAG index success for doc {}", doc.getId());
-            } catch (Exception e) {
-                log.error("RAG indexing failed for doc {}: {}", doc.getId(), e.getMessage());
-                doc.setSyncStatus(SyncStatus.FAILED);
-                doc.setIndexError(e.getMessage());
-            }
-            knowledgeDocumentRepository.save(doc);
-        });
+        AsyncTask task = new AsyncTask();
+        task.setTaskType("DOC_INDEX");
+        task.setRefId(doc.getId());
+        task.setRefExtra(kbId);
+        asyncTaskRepository.save(task);
+
+        return doc;
     }
 
     private UpstreamConfig getEmbeddingUpstream() {

@@ -84,13 +84,14 @@ public class UserProfileService {
     @Transactional
     public Map<String, Object> refresh(Long userId, Long tenantId) {
         UserProfile profile = self.getOrCreate(userId, tenantId);
-        if (SynthesisStatus.RUNNING == profile.getSynthesisStatus()) {
+        if (profile.getSynthesisStatus() == SynthesisStatus.RUNNING
+            || profile.getSynthesisStatus() == SynthesisStatus.PENDING) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("status", "running");
             body.put("message", "profile synthesis is already in progress");
             return body;
         }
-        synthesisService.synthesize(userId, tenantId);
+        synthesisService.checkAndTrigger(userId, tenantId);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("status", "queued");
         body.put("message", "profile synthesis started");

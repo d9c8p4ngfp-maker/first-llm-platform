@@ -32,6 +32,9 @@ public class KnowledgeDocument {
     @Column(columnDefinition = "LONGTEXT")
     private String content;
 
+    @Column(name = "source_url", length = 2000)
+    private String sourceUrl;
+
     @Column(name = "file_path", length = 500)
     private String filePath;
 

@@ -2,6 +2,7 @@ package com.first.gateway.service.profile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.first.gateway.config.AiServiceProperties;
+import com.first.gateway.domain.entity.AsyncTask;
 import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.entity.PipelineConfig;
 import com.first.gateway.domain.entity.UserMemory;
@@ -18,11 +19,11 @@ import com.first.gateway.infra.ai.dto.SynthesisConfig;
 import com.first.gateway.infra.ai.dto.UpstreamConfig;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.relay.router.ChannelSelector;
+import com.first.gateway.repository.AsyncTaskRepository;
 import com.first.gateway.repository.UserProfileRepository;
 import com.first.gateway.service.pipeline.PipelineConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +44,7 @@ public class ProfileSynthesisService {
     private final ChannelSelector channelSelector;
     private final ChannelKeyCrypto channelKeyCrypto;
     private final ObjectMapper objectMapper;
+    private final AsyncTaskRepository asyncTaskRepository;
 
     public ProfileSynthesisService(UserProfileRepository profileRepository,
                                     UserMemoryService memoryService,
@@ -51,7 +53,8 @@ public class ProfileSynthesisService {
                                     AiServiceProperties aiServiceProperties,
                                     ChannelSelector channelSelector,
                                     ChannelKeyCrypto channelKeyCrypto,
-                                    ObjectMapper objectMapper) {
+                                    ObjectMapper objectMapper,
+                                    AsyncTaskRepository asyncTaskRepository) {
         this.profileRepository = profileRepository;
         this.memoryService = memoryService;
         this.pipelineConfigService = pipelineConfigService;
@@ -60,63 +63,54 @@ public class ProfileSynthesisService {
         this.channelSelector = channelSelector;
         this.channelKeyCrypto = channelKeyCrypto;
         this.objectMapper = objectMapper;
+        this.asyncTaskRepository = asyncTaskRepository;
     }
 
     public void checkAndTrigger(Long userId, Long tenantId) {
         UserProfile profile = profileRepository.findByUserId(userId).orElse(null);
         if (profile == null) return;
 
+        if (profile.getSynthesisStatus() == SynthesisStatus.PENDING
+            || profile.getSynthesisStatus() == SynthesisStatus.RUNNING) {
+            return;
+        }
+
         int currentCount = profile.getMemoryCount() != null ? profile.getMemoryCount() : 0;
         int lastSynthesisCount = profile.getLastSynthesisCount() != null ? profile.getLastSynthesisCount() : 0;
         int newMemories = currentCount - lastSynthesisCount;
 
         if (newMemories >= 5) {
-            synthesize(userId, tenantId);
+            profile.setSynthesisStatus(SynthesisStatus.PENDING);
+            profileRepository.save(profile);
+
+            AsyncTask task = new AsyncTask();
+            task.setTaskType("PROFILE_SYNTHESIS");
+            task.setRefId(profile.getId());
+            asyncTaskRepository.save(task);
         }
     }
 
-    @Async("profileSynthesisExecutor")
     @Transactional
-    public void synthesize(Long userId, Long tenantId) {
+    public void doSynthesis(UserProfile profile) {
+        PipelineConfig config;
         try {
-            UserProfile profile = profileRepository.findByUserId(userId).orElse(null);
-            if (profile == null) return;
-
-            if (SynthesisStatus.RUNNING == profile.getSynthesisStatus()) {
-                log.info("Profile synthesis already running for user {}", userId);
-                return;
-            }
-
-            profile.setSynthesisStatus(SynthesisStatus.RUNNING);
-            profileRepository.save(profile);
-
-            PipelineConfig config;
-            try {
-                config = pipelineConfigService.getByKey("memory.synthesis", userId);
-            } catch (Exception e) {
-                log.debug("No memory.synthesis pipeline config, using defaults");
-                config = null;
-            }
-
-            List<UserMemory> activeMemories = memoryService.listForUser(userId, null);
-            int limit = Math.min(activeMemories.size(), 50);
-            activeMemories = activeMemories.subList(0, limit);
-
-            boolean updated = applySynthesis(userId, profile, activeMemories, config);
-
-            profile.setLastSynthesisCount(profile.getMemoryCount());
-            profile.setSynthesisStatus(SynthesisStatus.IDLE);
-            profile.setVersion((profile.getVersion() != null ? profile.getVersion() : 0) + 1);
-            profileRepository.save(profile);
-
-            log.info("Profile synthesis completed for user {} (updated={})", userId, updated);
+            config = pipelineConfigService.getByKey("memory.synthesis", profile.getUserId());
         } catch (Exception e) {
-            log.error("Profile synthesis failed for user {}: {}", userId, e.getMessage(), e);
-            profileRepository.findByUserId(userId).ifPresent(p -> {
-                p.setSynthesisStatus(SynthesisStatus.FAILED);
-                profileRepository.save(p);
-            });
+            log.debug("No memory.synthesis pipeline config, using defaults");
+            config = null;
         }
+
+        List<UserMemory> activeMemories = memoryService.listForUser(profile.getUserId(), null);
+        int limit = Math.min(activeMemories.size(), 50);
+        activeMemories = activeMemories.subList(0, limit);
+
+        boolean updated = applySynthesis(profile.getUserId(), profile, activeMemories, config);
+
+        profile.setLastSynthesisCount(profile.getMemoryCount());
+        profile.setVersion((profile.getVersion() != null ? profile.getVersion() : 0) + 1);
+        profileRepository.save(profile);
+
+        log.info("Profile synthesis completed for user {} (updated={})", profile.getUserId(), updated);
     }
 
     private boolean applySynthesis(Long userId, UserProfile profile, List<UserMemory> memories, PipelineConfig config) {
