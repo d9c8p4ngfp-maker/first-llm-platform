@@ -18,7 +18,7 @@ public class AiServiceProperties {
     private String embeddingModel = "text-embedding-3-small";
     private String internalToken = "";
     private int connectTimeoutMs = 5000;
-    private int readTimeoutMs = 120000;
+    private int readTimeoutMs = 300000;
     private int streamReadTimeoutMs = 300000;
     private Retry retry = new Retry();
 

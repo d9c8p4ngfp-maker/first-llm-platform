@@ -443,14 +443,11 @@ public class RelayServiceImpl implements RelayService {
             channelKeyCrypto.decrypt(channel.getApiKeyEncrypted()),
             selection.model().getModelName());
 
-        List<Number> kbIds = (List<Number>) upstreamRequest.get("x_knowledge_base_ids");
         List<RagChunkResult> ragContext = List.of();
-        if (kbIds != null && !kbIds.isEmpty()) {
-            String query = extractLastUserMessage(upstreamRequest);
-            if (query != null && !query.isBlank()) {
-                var ragResult = knowledgeBaseService.searchAll(tenantId, query, 5);
-                ragContext = ragResult.map(RagQueryResponse::chunks).orElse(List.of());
-            }
+        String query = extractLastUserMessage(upstreamRequest);
+        if (query != null && !query.isBlank()) {
+            var ragResult = knowledgeBaseService.searchAll(tenantId, query, 5);
+            ragContext = ragResult.map(RagQueryResponse::chunks).orElse(List.of());
         }
 
         return new ChatRequest(

@@ -1,22 +1,16 @@
 package com.first.gateway.service.knowledge;
 
 import com.first.gateway.domain.entity.AsyncTask;
-import com.first.gateway.domain.entity.Channel;
-import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.domain.entity.KnowledgeDocument;
 import com.first.gateway.domain.enums.SyncStatus;
-import com.first.gateway.domain.enums.ModelType;
 import com.first.gateway.infra.ai.AiServiceClient;
 import com.first.gateway.infra.ai.dto.CrawlAndIndexRequest;
 import com.first.gateway.infra.ai.dto.CrawlAndIndexResponse;
 import com.first.gateway.infra.ai.dto.RagIndexRequest;
 import com.first.gateway.infra.ai.dto.RagIndexResponse;
 import com.first.gateway.infra.ai.dto.UpstreamConfig;
-import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
-import com.first.gateway.repository.ChannelModelRepository;
-import com.first.gateway.repository.ChannelRepository;
 import com.first.gateway.repository.KnowledgeDocumentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,7 +22,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,18 +37,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class DocIndexTaskHandlerTest {
 
     @Mock private KnowledgeDocumentRepository documentRepository;
-    @Mock private ChannelModelRepository channelModelRepository;
-    @Mock private ChannelRepository channelRepository;
-    @Mock private ChannelKeyCrypto channelKeyCrypto;
     @Mock private AiServiceClient aiServiceClient;
+    @Mock private KnowledgeBaseService knowledgeBaseService;
 
     @InjectMocks
     private DocIndexTaskHandler handler;
 
     private AsyncTask task;
     private KnowledgeDocument doc;
-    private ChannelModel embeddingModel;
-    private Channel channel;
 
     @BeforeEach
     void setUp() {
@@ -71,20 +60,8 @@ class DocIndexTaskHandlerTest {
         doc.setFileType("TEXT");
         doc.setSyncStatus(SyncStatus.PENDING);
 
-        embeddingModel = new ChannelModel();
-        embeddingModel.setId(1L);
-        embeddingModel.setChannelId(5L);
-        embeddingModel.setModelName("text-embedding-3-small");
-
-        channel = new Channel();
-        channel.setId(5L);
-        channel.setBaseUrl("https://api.openai.com");
-        channel.setApiKeyEncrypted("encrypted-key");
-
-        when(channelModelRepository.findByModelTypeEnabled(ModelType.EMBEDDING))
-                .thenReturn(List.of(embeddingModel));
-        when(channelRepository.findById(5L)).thenReturn(Optional.of(channel));
-        when(channelKeyCrypto.decrypt("encrypted-key")).thenReturn("sk-real-key");
+        when(knowledgeBaseService.getEmbeddingUpstream())
+                .thenReturn(new UpstreamConfig("https://api.openai.com", "sk-real-key", "text-embedding-3-small"));
     }
 
     @Test
@@ -129,9 +106,8 @@ class DocIndexTaskHandlerTest {
 
     @Test
     void execute_shouldThrowWhenNoEmbeddingModel() {
-        when(channelModelRepository.findByModelTypeEnabled(ModelType.EMBEDDING))
-                .thenReturn(List.of());
-
+        when(knowledgeBaseService.getEmbeddingUpstream())
+                .thenThrow(new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL, "No embedding model available"));
         when(documentRepository.findById(100L)).thenReturn(Optional.of(doc));
 
         assertThatThrownBy(() -> handler.execute(task))

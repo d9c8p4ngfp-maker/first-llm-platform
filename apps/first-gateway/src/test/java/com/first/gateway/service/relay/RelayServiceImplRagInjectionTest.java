@@ -175,7 +175,7 @@ class RelayServiceImplRagInjectionTest {
     }
 
     @Test
-    void buildPythonChatBody_ragContextEmpty_whenNoKbIds() throws Exception {
+    void buildPythonChatBody_shouldCallSearchAll_evenWithoutExplicitKbIds() throws Exception {
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(msg("user", "hello"));
 
@@ -189,6 +189,8 @@ class RelayServiceImplRagInjectionTest {
 
         when(userProfileRepository.findByUserId(anyLong())).thenReturn(Optional.empty());
         when(userMemoryService.listForUser(anyLong(), any())).thenReturn(List.of());
+        when(knowledgeBaseService.searchAll(eq(100L), eq("hello"), eq(5)))
+                .thenReturn(Optional.empty());
 
         Method method = RelayServiceImpl.class.getDeclaredMethod(
                 "buildPythonChatBody", Long.class, Long.class, ChannelSelection.class,
@@ -199,7 +201,7 @@ class RelayServiceImplRagInjectionTest {
                 relayService, 1L, 100L, selection, upstreamRequest, false);
 
         assertThat(result.ragContext()).isEmpty();
-        verify(knowledgeBaseService, never()).searchAll(anyLong(), any(), anyInt());
+        verify(knowledgeBaseService).searchAll(eq(100L), eq("hello"), eq(5));
     }
 
     @Test

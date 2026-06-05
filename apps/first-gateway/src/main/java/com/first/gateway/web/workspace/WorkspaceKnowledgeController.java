@@ -125,6 +125,10 @@ public class WorkspaceKnowledgeController {
     @PostMapping("/{id}/import-url")
     public KnowledgeDocument importUrl(@PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
+        KnowledgeBase kb = knowledgeBaseRepository.findById(id).orElse(null);
+        if (kb != null && "PUBLIC".equals(kb.getVisibility())) {
+            AdminAccess.requirePlatformAdmin(principal);
+        }
         String url = body.get("url");
         String title = body.get("title");
         return knowledgeBaseService.importFromUrl(id, principal.tenantId(), principal.userId(), url, title);
