@@ -37,4 +37,15 @@ public interface ChannelModelRepository extends JpaRepository<ChannelModel, Long
         ORDER BY cm.modelName ASC
         """)
     List<ChannelModel> findEnabledByUserId(@Param("userId") Long userId);
+
+    @Query("""
+        SELECT cm FROM ChannelModel cm
+        JOIN Channel c ON cm.channelId = c.id
+        WHERE cm.modelType = :modelType
+          AND cm.enabled = 1
+          AND c.status = 'ACTIVE'
+          AND c.deleted = 0
+        ORDER BY c.priority DESC, c.weight DESC
+        """)
+    List<ChannelModel> findByModelTypeEnabled(@Param("modelType") String modelType);
 }

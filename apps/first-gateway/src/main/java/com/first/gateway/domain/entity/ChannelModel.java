@@ -42,6 +42,9 @@ public class ChannelModel {
     @Column(nullable = false, length = 20)
     private ModelTier tier = ModelTier.STANDARD;
 
+    @Column(name = "model_type", nullable = false, length = 20)
+    private String modelType = "CHAT";
+
     @Column(nullable = false)
     private Short enabled = 1;
 }
