@@ -49,3 +49,4 @@ Thumbs.db
 # Tooling temp
 tooling/scripts/_utf8test.txt
 tooling/scripts/_mem-lines.json
+.worktrees/
