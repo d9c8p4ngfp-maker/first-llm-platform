@@ -22,6 +22,15 @@ public interface ChannelModelRepository extends JpaRepository<ChannelModel, Long
     List<ChannelModel> findByModelNameOrAliasAndEnabled(@Param("model") String model);
 
     @Query("""
+        SELECT cm FROM ChannelModel cm
+        WHERE (cm.modelName = :model OR cm.modelAlias = :model)
+          AND cm.enabled = 1
+          AND cm.modelType = :modelType
+        """)
+    List<ChannelModel> findByModelNameOrAliasAndEnabledAndModelType(
+        @Param("model") String model, @Param("modelType") String modelType);
+
+    @Query("""
         SELECT CASE WHEN COUNT(cm) > 0 THEN true ELSE false END
         FROM ChannelModel cm
         WHERE cm.modelName = :model OR cm.modelAlias = :model

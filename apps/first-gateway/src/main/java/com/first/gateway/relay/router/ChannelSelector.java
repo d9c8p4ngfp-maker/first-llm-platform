@@ -66,7 +66,8 @@ public class ChannelSelector {
         if (!channelModelRepository.existsByModelNameOrAlias(model)) {
             throw new GatewayException(GatewayError.MODEL_NOT_FOUND);
         }
-        List<ChannelModel> models = channelModelRepository.findByModelNameOrAliasAndEnabled(model);
+        List<ChannelModel> models = channelModelRepository
+            .findByModelNameOrAliasAndEnabledAndModelType(model, "CHAT");
         if (models.isEmpty()) {
             throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
         }

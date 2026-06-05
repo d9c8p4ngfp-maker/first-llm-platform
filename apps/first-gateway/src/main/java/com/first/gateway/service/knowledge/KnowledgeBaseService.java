@@ -2,9 +2,9 @@ package com.first.gateway.service.knowledge;
 
 import com.first.gateway.config.AiServiceProperties;
 import com.first.gateway.domain.entity.Channel;
+import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.domain.entity.KnowledgeBase;
 import com.first.gateway.domain.entity.KnowledgeDocument;
-import com.first.gateway.domain.enums.ChannelStatus;
 import com.first.gateway.domain.enums.SourceType;
 import com.first.gateway.domain.enums.SyncStatus;
 import com.first.gateway.infra.ai.AiServiceClient;
@@ -14,6 +14,7 @@ import com.first.gateway.infra.ai.dto.UpstreamConfig;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
+import com.first.gateway.repository.ChannelModelRepository;
 import com.first.gateway.repository.ChannelRepository;
 import com.first.gateway.repository.KnowledgeBaseRepository;
 import com.first.gateway.repository.KnowledgeDocumentRepository;
@@ -40,6 +41,7 @@ public class KnowledgeBaseService {
     private final AiServiceClient aiServiceClient;
     private final AiServiceProperties aiServiceProperties;
     private final ChannelRepository channelRepository;
+    private final ChannelModelRepository channelModelRepository;
     private final ChannelKeyCrypto channelKeyCrypto;
 
     public KnowledgeBaseService(KnowledgeBaseRepository knowledgeBaseRepository,
@@ -47,12 +49,14 @@ public class KnowledgeBaseService {
                                 AiServiceClient aiServiceClient,
                                 AiServiceProperties aiServiceProperties,
                                 ChannelRepository channelRepository,
+                                ChannelModelRepository channelModelRepository,
                                 ChannelKeyCrypto channelKeyCrypto) {
         this.knowledgeBaseRepository = knowledgeBaseRepository;
         this.knowledgeDocumentRepository = knowledgeDocumentRepository;
         this.aiServiceClient = aiServiceClient;
         this.aiServiceProperties = aiServiceProperties;
         this.channelRepository = channelRepository;
+        this.channelModelRepository = channelModelRepository;
         this.channelKeyCrypto = channelKeyCrypto;
     }
 
@@ -150,7 +154,7 @@ public class KnowledgeBaseService {
                 RagQueryRequest ragRequest = new RagQueryRequest(
                     query, List.of(kbId), topK,
                     aiServiceProperties.getEmbeddingModel(),
-                    getDefaultUpstream());
+                    getEmbeddingUpstream());
 
                 var response = aiServiceClient.queryRag(ragRequest);
                 if (response.isPresent() && response.get().chunks() != null
@@ -222,7 +226,7 @@ public class KnowledgeBaseService {
                     null,
                     doc.getFileType() != null ? doc.getFileType() : "TEXT",
                     aiServiceProperties.getEmbeddingModel(),
-                    getDefaultUpstream());
+                    getEmbeddingUpstream());
                 aiServiceClient.indexRag(indexRequest);
                 doc.setSyncStatus(SyncStatus.INDEXED);
                 log.info("RAG index success for doc {}", doc.getId());
@@ -235,15 +239,18 @@ public class KnowledgeBaseService {
         });
     }
 
-    private UpstreamConfig getDefaultUpstream() {
-        List<Channel> channels = channelRepository.findByStatusOrderByPriorityDescWeightDesc(ChannelStatus.ACTIVE);
-        if (channels.isEmpty()) {
-            return new UpstreamConfig("https://api.openai.com", "", aiServiceProperties.getEmbeddingModel());
+    private UpstreamConfig getEmbeddingUpstream() {
+        List<ChannelModel> embeddingModels = channelModelRepository
+            .findByModelTypeEnabled("EMBEDDING");
+        if (embeddingModels.isEmpty()) {
+            throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL, "No embedding model available");
         }
-        Channel channel = channels.getFirst();
+        ChannelModel cm = embeddingModels.getFirst();
+        Channel channel = channelRepository.findById(cm.getChannelId())
+            .orElseThrow(() -> new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL));
         return new UpstreamConfig(
             channel.getBaseUrl(),
             channelKeyCrypto.decrypt(channel.getApiKeyEncrypted()),
-            aiServiceProperties.getEmbeddingModel());
+            cm.getModelName());
     }
 }
