@@ -1,5 +1,7 @@
 package com.first.gateway.domain.entity;
 
+import com.first.gateway.domain.enums.SourceType;
+import com.first.gateway.domain.enums.SyncStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -39,11 +41,13 @@ public class KnowledgeDocument {
     @Column(name = "file_size")
     private Long fileSize;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "source_type", nullable = false, length = 50)
-    private String sourceType = "MANUAL";
+    private SourceType sourceType = SourceType.MANUAL;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "sync_status", nullable = false, length = 20)
-    private String syncStatus = "PENDING";
+    private SyncStatus syncStatus = SyncStatus.PENDING;
 
     @Column(name = "external_doc_id", length = 200)
     private String externalDocId;
