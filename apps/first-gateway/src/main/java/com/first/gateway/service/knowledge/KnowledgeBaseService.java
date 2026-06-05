@@ -5,6 +5,8 @@ import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.entity.KnowledgeBase;
 import com.first.gateway.domain.entity.KnowledgeDocument;
 import com.first.gateway.domain.enums.ChannelStatus;
+import com.first.gateway.domain.enums.SourceType;
+import com.first.gateway.domain.enums.SyncStatus;
 import com.first.gateway.infra.ai.AiServiceClient;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
@@ -114,8 +116,8 @@ public class KnowledgeBaseService {
         doc.setTenantId(tenantId);
         doc.setTitle(title != null && !title.isBlank() ? title.trim() : "Untitled");
         doc.setContent(content);
-        doc.setSourceType("MANUAL");
-        doc.setSyncStatus("INDEXING");
+        doc.setSourceType(SourceType.MANUAL);
+        doc.setSyncStatus(SyncStatus.INDEXING);
         doc.setDeleted((short) 0);
         doc = knowledgeDocumentRepository.save(doc);
         triggerIndex(kbId, doc);
@@ -191,7 +193,7 @@ public class KnowledgeBaseService {
     @Transactional
     public KnowledgeDocument reindexDocument(Long kbId, Long tenantId, Long userId, Long docId) {
         KnowledgeDocument doc = requireDocument(docId, kbId, tenantId);
-        doc.setSyncStatus("INDEXING");
+        doc.setSyncStatus(SyncStatus.INDEXING);
         doc = knowledgeDocumentRepository.save(doc);
         triggerIndex(kbId, doc);
         return doc;
@@ -211,11 +213,11 @@ public class KnowledgeBaseService {
                 indexRequest.put("embedding_model", aiServiceProperties.getEmbeddingModel());
                 indexRequest.put("upstream", getDefaultUpstream());
                 aiServiceClient.indexRag(indexRequest);
-                doc.setSyncStatus("INDEXED");
+                doc.setSyncStatus(SyncStatus.INDEXED);
                 log.info("RAG index success for doc {}", doc.getId());
             } catch (Exception e) {
                 log.error("RAG indexing failed for doc {}: {}", doc.getId(), e.getMessage());
-                doc.setSyncStatus("FAILED");
+                doc.setSyncStatus(SyncStatus.FAILED);
                 doc.setIndexError(e.getMessage());
             }
             knowledgeDocumentRepository.save(doc);

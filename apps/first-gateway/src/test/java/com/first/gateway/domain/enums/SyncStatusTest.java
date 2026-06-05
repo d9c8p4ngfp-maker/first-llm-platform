@@ -14,11 +14,6 @@ class SyncStatusTest {
     }
 
     @Test
-    void pendingIsDefault() {
-        assertThat(SyncStatus.PENDING.name()).isEqualTo("PENDING");
-    }
-
-    @Test
     void knowledgeDocumentSyncStatusDefaultIsPending() {
         KnowledgeDocument doc = new KnowledgeDocument();
         assertThat(doc.getSyncStatus()).isEqualTo(SyncStatus.PENDING);
