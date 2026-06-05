@@ -19,4 +19,9 @@ export const knowledgeApi = {
     apiClient.post(`/api/v1/knowledge-bases/${id}/documents/${docId}/reindex`),
   search: (id: number, query: string, topK = 5): Promise<{ content: string; score: number; documentTitle?: string }[]> =>
     apiClient.post(`/api/v1/knowledge-bases/${id}/search`, { query, top_k: topK }),
+  listPublic: (): Promise<KnowledgeBase[]> => apiClient.get('/api/v1/knowledge-bases/public'),
+  createPublic: (name: string, description?: string): Promise<KnowledgeBase> =>
+    apiClient.post('/api/v1/knowledge-bases/public', { name, description }),
+  importUrl: (kbId: number, url: string, title?: string): Promise<KnowledgeDocument> =>
+    apiClient.post(`/api/v1/knowledge-bases/${kbId}/import-url`, { url, title }),
 }

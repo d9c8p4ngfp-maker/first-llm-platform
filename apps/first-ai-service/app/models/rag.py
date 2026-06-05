@@ -54,6 +54,14 @@ class RagQueryResponse(BaseModel):
     chunks: list[RagChunkResult] = Field(default_factory=list)
 
 
+class CrawlAndIndexRequest(BaseModel):
+    url: str
+    knowledge_base_id: int
+    document_id: int
+    embedding_model: str = "text-embedding-3-small"
+    upstream: UpstreamConfig
+
+
 class EmbedRequest(BaseModel):
     input: str | list[str]
     model: str = "text-embedding-3-small"

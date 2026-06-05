@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.models.rag import (
+    CrawlAndIndexRequest,
     EmbedRequest,
     EmbedResponse,
     RagIndexRequest,
@@ -8,6 +9,7 @@ from app.models.rag import (
     RagQueryRequest,
     RagQueryResponse,
 )
+from app.services.crawl_service import crawl_and_index
 from app.services.rag_service import embed_text, index_document, query_rag
 
 router = APIRouter(prefix="/ai/rag", tags=["rag"])
@@ -33,5 +35,16 @@ def rag_query(body: RagQueryRequest) -> RagQueryResponse:
 def rag_embed(body: EmbedRequest) -> EmbedResponse:
     try:
         return embed_text(body)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/crawl-and-index")
+async def crawl_and_index_endpoint(req: CrawlAndIndexRequest):
+    try:
+        result = crawl_and_index(
+            req.url, req.knowledge_base_id, req.document_id, req.upstream
+        )
+        return result
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
