@@ -95,7 +95,9 @@ class DocIndexTaskHandlerTest {
 
         handler.execute(task);
 
-        assertThat(doc.getSyncStatus()).isEqualTo(SyncStatus.INDEXING);
+        assertThat(doc.getSyncStatus()).isEqualTo(SyncStatus.PENDING);
+        assertThat(doc.getChunkCount()).isEqualTo(3);
+        assertThat(doc.getWordCount()).isEqualTo(150);
         verify(aiServiceClient).indexRag(any(RagIndexRequest.class));
         verify(aiServiceClient, never()).crawlAndIndex(any());
     }
@@ -111,7 +113,9 @@ class DocIndexTaskHandlerTest {
 
         handler.execute(task);
 
-        assertThat(doc.getSyncStatus()).isEqualTo(SyncStatus.CRAWLING);
+        assertThat(doc.getSyncStatus()).isEqualTo(SyncStatus.PENDING);
+        assertThat(doc.getChunkCount()).isEqualTo(2);
+        assertThat(doc.getWordCount()).isEqualTo(500);
         verify(aiServiceClient).crawlAndIndex(any(CrawlAndIndexRequest.class));
         verify(aiServiceClient, never()).indexRag(any());
     }
@@ -261,5 +265,24 @@ class DocIndexTaskHandlerTest {
         RagIndexRequest req = captor.getValue();
         assertThat(req.filePath()).isEqualTo("/uploads/test.pdf");
         assertThat(req.fileType()).isEqualTo("PDF");
+        assertThat(doc.getChunkCount()).isEqualTo(3);
+        assertThat(doc.getWordCount()).isEqualTo(150);
+    }
+
+    @Test
+    void crawl_shouldUpdateTitleWhenDefaultUrlTitle() throws Exception {
+        doc.setSourceUrl("https://example.com/doc");
+        doc.setTitle("https://example.com/doc");
+        doc.setContent(null);
+
+        when(documentRepository.findById(100L)).thenReturn(Optional.of(doc));
+        when(aiServiceClient.crawlAndIndex(any(CrawlAndIndexRequest.class)))
+                .thenReturn(Optional.of(new CrawlAndIndexResponse("ok", "Actual Page Title", 500, 2)));
+
+        handler.execute(task);
+
+        assertThat(doc.getTitle()).isEqualTo("Actual Page Title");
+        assertThat(doc.getChunkCount()).isEqualTo(2);
+        assertThat(doc.getWordCount()).isEqualTo(500);
     }
 }

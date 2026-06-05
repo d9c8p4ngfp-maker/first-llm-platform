@@ -52,17 +52,20 @@ public class DocIndexTaskHandler implements TaskHandler {
         UpstreamConfig upstream = getEmbeddingUpstream();
 
         if (doc.getSourceUrl() != null && !doc.getSourceUrl().isBlank()) {
-            doc.setSyncStatus(SyncStatus.CRAWLING);
-            documentRepository.save(doc);
             var crawlResult = aiServiceClient.crawlAndIndex(new CrawlAndIndexRequest(
                 doc.getSourceUrl(), task.getRefExtra(), doc.getId(),
                 upstream.model(), upstream));
             if (crawlResult.isEmpty()) {
                 throw new RuntimeException("crawlAndIndex returned empty result");
             }
+            CrawlAndIndexResponse cr = crawlResult.get();
+            doc.setChunkCount(cr.chunkCount());
+            doc.setWordCount(cr.wordCount());
+            if (cr.title() != null && !cr.title().isBlank() && doc.getTitle() != null
+                && (doc.getTitle().startsWith("http") || doc.getTitle().equals(doc.getSourceUrl()))) {
+                doc.setTitle(cr.title());
+            }
         } else {
-            doc.setSyncStatus(SyncStatus.INDEXING);
-            documentRepository.save(doc);
             var indexResult = aiServiceClient.indexRag(new RagIndexRequest(
                 doc.getId(), task.getRefExtra(),
                 doc.getContent(), doc.getFilePath(), doc.getFileType(),
@@ -70,7 +73,11 @@ public class DocIndexTaskHandler implements TaskHandler {
             if (indexResult.isEmpty()) {
                 throw new RuntimeException("indexRag returned empty result");
             }
+            RagIndexResponse ir = indexResult.get();
+            doc.setChunkCount(ir.chunkCount());
+            doc.setWordCount(ir.totalTokens());
         }
+        documentRepository.save(doc);
     }
 
     @Override
