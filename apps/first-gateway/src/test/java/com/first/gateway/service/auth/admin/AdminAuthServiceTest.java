@@ -3,6 +3,7 @@ package com.first.gateway.service.auth.admin;
 import com.first.gateway.config.AuthProperties;
 import com.first.gateway.domain.entity.User;
 import com.first.gateway.domain.entity.UserTenantRel;
+import com.first.gateway.domain.enums.TenantRole;
 import com.first.gateway.domain.enums.UserStatus;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
@@ -64,7 +65,7 @@ class AdminAuthServiceTest {
         AdminAuthService.LoginResult result = adminAuthService.login("admin", "admin123");
 
         assertEquals("admin", result.principal().username());
-        assertEquals("OWNER", result.principal().role());
+        assertEquals(TenantRole.OWNER, result.principal().role());
         verify(userRepository).save(user);
     }
 
@@ -130,7 +131,7 @@ class AdminAuthServiceTest {
         UserTenantRel rel = new UserTenantRel();
         rel.setUserId(userId);
         rel.setTenantId(1L);
-        rel.setRole("OWNER");
+        rel.setRole(TenantRole.OWNER);
         return rel;
     }
 }
