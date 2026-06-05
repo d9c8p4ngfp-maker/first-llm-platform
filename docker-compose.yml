@@ -1,9 +1,14 @@
+volumes:
+  shared-uploads:
+
 services:
   first-ai-service:
     build: ./apps/first-ai-service
     container_name: first-ai-service
     expose:
       - "8000"
+    volumes:
+      - shared-uploads:/app/uploads
     environment:
       LOG_LEVEL: ${AI_LOG_LEVEL:-info}
       AI_SERVICE_INTERNAL_TOKEN: ${AI_SERVICE_INTERNAL_TOKEN:-compose-internal-ai-token-32chars-min}
@@ -47,6 +52,8 @@ services:
     container_name: first-gateway
     ports:
       - "8080:8080"
+    volumes:
+      - shared-uploads:/app/uploads
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/first_gateway?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai

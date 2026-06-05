@@ -3,6 +3,7 @@ package com.first.gateway.web.workspace;
 import com.first.gateway.domain.entity.KnowledgeBase;
 import com.first.gateway.domain.entity.KnowledgeDocument;
 import com.first.gateway.service.auth.admin.AdminPrincipal;
+import com.first.gateway.service.knowledge.FileStorageService;
 import com.first.gateway.service.knowledge.KnowledgeBaseService;
 import com.first.gateway.web.workspace.dto.KnowledgeBaseRequest;
 import com.first.gateway.web.workspace.dto.KnowledgeDocumentRequest;
@@ -20,9 +21,12 @@ import java.util.Map;
 public class WorkspaceKnowledgeController {
 
     private final KnowledgeBaseService knowledgeBaseService;
+    private final FileStorageService fileStorageService;
 
-    public WorkspaceKnowledgeController(KnowledgeBaseService knowledgeBaseService) {
+    public WorkspaceKnowledgeController(KnowledgeBaseService knowledgeBaseService,
+                                         FileStorageService fileStorageService) {
         this.knowledgeBaseService = knowledgeBaseService;
+        this.fileStorageService = fileStorageService;
     }
 
     @GetMapping
@@ -106,7 +110,8 @@ public class WorkspaceKnowledgeController {
                                              HttpServletRequest request) throws java.io.IOException {
         AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         String docTitle = title != null ? title : file.getOriginalFilename();
-        String content = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
-        return knowledgeBaseService.createDocument(id, principal.tenantId(), principal.userId(), docTitle, content);
+        FileStorageService.FileStorageResult stored = fileStorageService.store(file, id);
+        return knowledgeBaseService.createDocumentFromFile(id, principal.tenantId(), principal.userId(),
+            docTitle, stored);
     }
 }

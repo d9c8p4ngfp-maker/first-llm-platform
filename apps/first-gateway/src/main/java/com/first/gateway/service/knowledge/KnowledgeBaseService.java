@@ -139,6 +139,31 @@ public class KnowledgeBaseService {
     }
 
     @Transactional
+    public KnowledgeDocument createDocumentFromFile(Long kbId, Long tenantId, Long userId, String title,
+                                                      FileStorageService.FileStorageResult stored) {
+        requireByTenant(kbId, tenantId);
+        KnowledgeDocument doc = new KnowledgeDocument();
+        doc.setKnowledgeBaseId(kbId);
+        doc.setTenantId(tenantId);
+        doc.setTitle(title != null && !title.isBlank() ? title.trim() : "Untitled");
+        doc.setFilePath(stored.filePath());
+        doc.setFileType(stored.fileType());
+        doc.setFileSize(stored.fileSize());
+        doc.setSourceType(SourceType.FILE);
+        doc.setSyncStatus(SyncStatus.PENDING);
+        doc.setDeleted((short) 0);
+        doc = knowledgeDocumentRepository.save(doc);
+
+        AsyncTask task = new AsyncTask();
+        task.setTaskType("DOC_INDEX");
+        task.setRefId(doc.getId());
+        task.setRefExtra(kbId);
+        asyncTaskRepository.save(task);
+
+        return doc;
+    }
+
+    @Transactional
     public void deleteDocument(Long kbId, Long tenantId, Long docId) {
         KnowledgeDocument doc = requireDocument(docId, kbId, tenantId);
         doc.setDeleted((short) 1);
