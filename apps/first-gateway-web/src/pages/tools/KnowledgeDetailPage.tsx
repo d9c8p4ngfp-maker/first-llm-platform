@@ -1,15 +1,60 @@
 import { Link, useParams } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { ArrowLeft, Loader2, Plus, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, FileText, Globe, Link as LinkIcon, Loader2, PenLine, Plus, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogCloseButton } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
 import { knowledgeApi } from '@/api/knowledge'
 
 const emptyDocForm = { title: '', content: '' }
+
+function SourceBadge({ sourceType }: { sourceType: string }) {
+  switch (sourceType) {
+    case 'FILE':
+      return <Badge variant="secondary" className="gap-1"><FileText className="h-3 w-3" />FILE</Badge>
+    case 'URL':
+      return <Badge variant="secondary" className="gap-1"><Globe className="h-3 w-3" />URL</Badge>
+    default:
+      return <Badge variant="secondary" className="gap-1"><PenLine className="h-3 w-3" />TEXT</Badge>
+  }
+}
+
+function StatusBadge({ status, error }: { status: string; error?: string }) {
+  switch (status) {
+    case 'INDEXED':
+      return (
+        <div className="flex items-center gap-2">
+          <Badge className="border-green-300 bg-green-50 text-green-700">INDEXED</Badge>
+        </div>
+      )
+    case 'INDEXING':
+    case 'CRAWLING':
+      return (
+        <Badge className="border-yellow-300 bg-yellow-50 text-yellow-700">
+          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+          {status}
+        </Badge>
+      )
+    case 'FAILED':
+      return (
+        <div className="flex items-center gap-2">
+          <Badge className="border-red-300 bg-red-50 text-red-700">FAILED</Badge>
+          {error && (
+            <span className="flex items-center gap-1 text-xs text-red-600" title={error}>
+              <AlertTriangle className="h-3 w-3" />
+              {error.length > 30 ? `${error.slice(0, 30)}...` : error}
+            </span>
+          )}
+        </div>
+      )
+    default:
+      return <Badge variant="secondary">{status}</Badge>
+  }
+}
 
 export function KnowledgeDetailPage() {
   const { kbId } = useParams({ strict: false })
@@ -17,6 +62,9 @@ export function KnowledgeDetailPage() {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyDocForm)
+  const [urlOpen, setUrlOpen] = useState(false)
+  const [importUrl, setImportUrl] = useState('')
+  const [importTitle, setImportTitle] = useState('')
   const [reindexingId, setReindexingId] = useState<number | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<{ content: string; score: number; documentTitle?: string }[]>([])
@@ -75,6 +123,17 @@ export function KnowledgeDetailPage() {
     }
   }
 
+  const importUrlMut = useMutation({
+    mutationFn: () => knowledgeApi.importUrl(id, importUrl, importTitle || undefined),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['knowledge-docs', id] })
+      qc.invalidateQueries({ queryKey: ['knowledge-base', id] })
+      setUrlOpen(false)
+      setImportUrl('')
+      setImportTitle('')
+    },
+  })
+
   if (isLoading) return <p className="text-sm text-[hsl(var(--muted-foreground))]">Loading...</p>
   if (!kb) return <p className="text-sm text-red-600">知识库不存在</p>
 
@@ -94,12 +153,17 @@ export function KnowledgeDetailPage() {
           <Plus className="mr-1 h-4 w-4" />
           添加文档
         </Button>
+        <Button variant="outline" onClick={() => setUrlOpen(true)}>
+          <LinkIcon className="mr-1 h-4 w-4" />
+          导入URL
+        </Button>
       </div>
       <div className="overflow-hidden rounded-xl border border-[hsl(var(--border))]">
         <table className="w-full text-left text-sm">
           <thead className="border-b bg-[hsl(var(--muted))]/50">
             <tr>
               <th className="px-4 py-2">标题</th>
+              <th className="px-4 py-2">来源</th>
               <th className="px-4 py-2">状态</th>
               <th className="px-4 py-2">更新时间</th>
               <th className="px-4 py-2">操作</th>
@@ -109,13 +173,26 @@ export function KnowledgeDetailPage() {
             {docs.map((d) => (
               <tr key={d.id} className="border-b last:border-0">
                 <td className="px-4 py-2">{d.title}</td>
-                <td className="px-4 py-2">{d.syncStatus}</td>
+                <td className="px-4 py-2">
+                  <SourceBadge sourceType={d.sourceType} />
+                </td>
+                <td className="px-4 py-2">
+                  <StatusBadge status={d.syncStatus} error={d.indexError} />
+                </td>
                 <td className="px-4 py-2 text-[hsl(var(--muted-foreground))]">{d.updatedAt}</td>
                 <td className="px-4 py-2">
                   <div className="flex gap-2">
-                    <Button variant="outline" className="h-8" onClick={() => reindexDoc(d.id)} disabled={reindexingId === d.id}>
-                      {reindexingId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                    </Button>
+                    {d.syncStatus === 'FAILED' && (
+                      <Button variant="outline" className="h-8" onClick={() => reindexDoc(d.id)} disabled={reindexingId === d.id}>
+                        {reindexingId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        重试
+                      </Button>
+                    )}
+                    {d.syncStatus !== 'FAILED' && (
+                      <Button variant="outline" className="h-8" onClick={() => reindexDoc(d.id)} disabled={reindexingId === d.id}>
+                        {reindexingId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                      </Button>
+                    )}
                     <Button
                       variant="destructive"
                       className="h-8"
@@ -131,8 +208,8 @@ export function KnowledgeDetailPage() {
             ))}
             {docs.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-[hsl(var(--muted-foreground))]">
-                  暂无文档，点击添加文档创建
+                <td colSpan={5} className="px-4 py-10 text-center text-[hsl(var(--muted-foreground))]">
+                  暂无文档，点击添加文档或导入URL创建
                 </td>
               </tr>
             )}
@@ -196,6 +273,43 @@ export function KnowledgeDetailPage() {
           <div>
             <Label>内容</Label>
             <Textarea className="min-h-[200px]" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={urlOpen}
+        onClose={() => setUrlOpen(false)}
+        title="导入URL"
+        footer={
+          <>
+            <DialogCloseButton onClick={() => setUrlOpen(false)} label="取消" />
+            <Button onClick={() => importUrlMut.mutate()} disabled={!importUrl.trim() || importUrlMut.isPending}>
+              {importUrlMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : '导入'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">
+            系统将自动提取网页内容并建立索引
+          </p>
+          <div>
+            <Label>URL</Label>
+            <Input
+              type="url"
+              placeholder="https://example.com/doc"
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>标题（可选）</Label>
+            <Input
+              placeholder="留空自动提取"
+              value={importTitle}
+              onChange={(e) => setImportTitle(e.target.value)}
+            />
           </div>
         </div>
       </Dialog>
