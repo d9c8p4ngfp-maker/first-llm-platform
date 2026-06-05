@@ -1,5 +1,6 @@
 package com.first.gateway.domain.entity;
 
+import com.first.gateway.domain.enums.ModelTier;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -37,8 +38,9 @@ public class ChannelModel {
     @Column(name = "max_context")
     private Integer maxContext;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private String tier = "STANDARD";
+    private ModelTier tier = ModelTier.STANDARD;
 
     @Column(nullable = false)
     private Short enabled = 1;

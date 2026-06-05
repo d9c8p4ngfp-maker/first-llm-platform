@@ -1,5 +1,6 @@
 package com.first.gateway.domain.entity;
 
+import com.first.gateway.domain.enums.ModelTier;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -28,8 +29,9 @@ public class RoutingRule {
     @Column(name = "condition_config", nullable = false, length = 4096)
     private String conditionConfig;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "target_tier", nullable = false, length = 20)
-    private String targetTier = "STANDARD";
+    private ModelTier targetTier = ModelTier.STANDARD;
 
     @Column(name = "target_model", length = 100)
     private String targetModel;

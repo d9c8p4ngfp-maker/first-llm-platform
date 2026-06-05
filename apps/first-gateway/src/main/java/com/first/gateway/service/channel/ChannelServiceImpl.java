@@ -3,6 +3,7 @@ package com.first.gateway.service.channel;
 import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.domain.enums.ChannelStatus;
+import com.first.gateway.domain.enums.ModelTier;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
@@ -220,11 +221,11 @@ public class ChannelServiceImpl implements ChannelService {
         if (!channelModelRepository.findByChannelIdAndEnabled(channelId, (short) 1).isEmpty()) {
             return;
         }
-        saveDefaultModel(channelId, "deepseek-chat", "deepseek-chat", "STANDARD");
-        saveDefaultModel(channelId, "deepseek-reasoner", "deepseek-reasoner", "PREMIUM");
+        saveDefaultModel(channelId, "deepseek-chat", "deepseek-chat", ModelTier.STANDARD);
+        saveDefaultModel(channelId, "deepseek-reasoner", "deepseek-reasoner", ModelTier.PREMIUM);
     }
 
-    private void saveDefaultModel(Long channelId, String modelName, String modelAlias, String tier) {
+    private void saveDefaultModel(Long channelId, String modelName, String modelAlias, ModelTier tier) {
         ChannelModel model = new ChannelModel();
         model.setChannelId(channelId);
         model.setModelName(modelName);

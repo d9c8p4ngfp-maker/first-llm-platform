@@ -1,5 +1,6 @@
 package com.first.gateway.domain.entity;
 
+import com.first.gateway.domain.enums.ModelTier;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,8 +23,9 @@ public class RoutingPrototype {
     @Column(name = "group_name", nullable = false, length = 100)
     private String groupName;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "target_tier", nullable = false, length = 20)
-    private String targetTier = "STANDARD";
+    private ModelTier targetTier = ModelTier.STANDARD;
 
     @Column(name = "prototype_text", nullable = false, length = 500)
     private String prototypeText;
