@@ -21,35 +21,43 @@ public class DevChannelKeyBootstrap implements ApplicationRunner {
     private final ChannelRepository channelRepository;
     private final ChannelKeyCrypto channelKeyCrypto;
     private final String deepseekApiKey;
+    private final String bailianApiKey;
 
     public DevChannelKeyBootstrap(ChannelRepository channelRepository,
                                   ChannelKeyCrypto channelKeyCrypto,
-                                  @Value("${gateway.upstream.deepseek-api-key:}") String deepseekApiKey) {
+                                  @Value("${gateway.upstream.deepseek-api-key:}") String deepseekApiKey,
+                                  @Value("${gateway.upstream.bailian-api-key:}") String bailianApiKey) {
         this.channelRepository = channelRepository;
         this.channelKeyCrypto = channelKeyCrypto;
         this.deepseekApiKey = deepseekApiKey;
+        this.bailianApiKey = bailianApiKey;
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        String resolvedKey = resolveDeepseekApiKey();
-        if (resolvedKey == null || resolvedKey.isBlank()) {
-            log.warn("DEEPSEEK_API_KEY not set; channel upstream key must be configured in database");
-            return;
-        }
-        channelRepository.findById(1L).ifPresentOrElse(channel -> updateIfNeeded(channel, resolvedKey),
-            () -> log.warn("Default channel id=1 not found; skip DEEPSEEK_API_KEY bootstrap"));
+        bootstrapChannelKey(1L, resolveKey(deepseekApiKey, "DEEPSEEK_API_KEY"), "DeepSeek");
+        bootstrapChannelKey(3L, resolveKey(bailianApiKey, "BAILIAN_API_KEY"), "Bailian");
     }
 
-    private String resolveDeepseekApiKey() {
-        if (deepseekApiKey != null && !deepseekApiKey.isBlank()) {
-            return deepseekApiKey;
+    private void bootstrapChannelKey(Long channelId, String plainKey, String label) {
+        if (plainKey == null || plainKey.isBlank()) {
+            log.warn("{}_API_KEY not set; channel {} key must be configured via API", label.toUpperCase(), channelId);
+            return;
         }
-        String fromEnv = System.getenv("DEEPSEEK_API_KEY");
+        channelRepository.findById(channelId).ifPresentOrElse(
+            channel -> updateIfNeeded(channel, plainKey),
+            () -> log.warn("Channel id={} not found; skip {} API_KEY bootstrap", channelId, label));
+    }
+
+    private String resolveKey(String configured, String envName) {
+        if (configured != null && !configured.isBlank()) {
+            return configured;
+        }
+        String fromEnv = System.getenv(envName);
         if (fromEnv != null && !fromEnv.isBlank()) {
             return fromEnv;
         }
-        return readFromDotEnv("DEEPSEEK_API_KEY");
+        return readFromDotEnv(envName);
     }
 
     private String readFromDotEnv(String key) {

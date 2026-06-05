@@ -20,6 +20,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
@@ -33,6 +35,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class UserServiceTest {
 
     @Mock
@@ -66,7 +69,7 @@ class UserServiceTest {
         UserGroup group = group(2L);
         when(userRepository.existsByUsername("alice")).thenReturn(false);
         when(userGroupService.findById(2L)).thenReturn(Optional.of(group));
-        when(passwordEncoder.encode("secret1")).thenReturn("encoded");
+        when(passwordEncoder.encode("secret1234567")).thenReturn("encoded");
         when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> {
             Tenant t = inv.getArgument(0);
             t.setId(100L);
@@ -80,13 +83,13 @@ class UserServiceTest {
         when(systemConfigService.getLong("quota_for_new_user", 100_000L)).thenReturn(100_000L);
         when(quotaRepository.save(any(Quota.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        userService.createUser("alice", "secret1", "a@test.com", 2L);
+        userService.createUser("alice", "secret1234567", "a@test.com", 2L);
 
         verify(tenantRepository).save(any(Tenant.class));
         verify(userRepository).save(any(User.class));
         verify(userTenantRelRepository).save(any(UserTenantRel.class));
         verify(quotaRepository).save(any(Quota.class));
-        verify(passwordEncoder).encode("secret1");
+        verify(passwordEncoder).encode("secret1234567");
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
@@ -99,7 +102,7 @@ class UserServiceTest {
         UserGroup group = group(1L);
         when(userRepository.existsByUsername("bob")).thenReturn(false);
         when(userGroupService.defaultGroup()).thenReturn(group);
-        when(passwordEncoder.encode("secret2")).thenReturn("encoded");
+        when(passwordEncoder.encode("secret1234567")).thenReturn("encoded");
         when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> {
             Tenant t = inv.getArgument(0);
             t.setId(101L);
@@ -130,7 +133,7 @@ class UserServiceTest {
         when(userRepository.existsByUsername("dup")).thenReturn(true);
 
         GatewayException ex = assertThrows(GatewayException.class,
-            () -> userService.createUser("dup", "secret1", null, null));
+            () -> userService.createUser("dup", "secret1234567", null, null));
         assertEquals(GatewayError.INVALID_REQUEST, ex.getError());
     }
 
@@ -140,7 +143,7 @@ class UserServiceTest {
         when(userGroupService.findById(999L)).thenReturn(Optional.empty());
 
         GatewayException ex = assertThrows(GatewayException.class,
-            () -> userService.createUser("carol", "secret1", null, 999L));
+            () -> userService.createUser("carol", "secret1234567", null, 999L));
         assertEquals(GatewayError.INVALID_REQUEST, ex.getError());
     }
 

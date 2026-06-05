@@ -8,6 +8,7 @@ import com.first.gateway.domain.entity.KnowledgeBase;
 import com.first.gateway.domain.entity.KnowledgeDocument;
 import com.first.gateway.domain.enums.SourceType;
 import com.first.gateway.domain.enums.SyncStatus;
+import com.first.gateway.domain.enums.ModelType;
 import com.first.gateway.infra.ai.AiServiceClient;
 import com.first.gateway.infra.ai.dto.RagChunkResult;
 import com.first.gateway.infra.ai.dto.RagQueryRequest;
@@ -347,7 +348,7 @@ public class KnowledgeBaseService {
 
     private UpstreamConfig getEmbeddingUpstream() {
         List<ChannelModel> embeddingModels = channelModelRepository
-            .findByModelTypeEnabled("EMBEDDING");
+            .findByModelTypeEnabled(ModelType.EMBEDDING);
         if (embeddingModels.isEmpty()) {
             throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL, "No embedding model available");
         }

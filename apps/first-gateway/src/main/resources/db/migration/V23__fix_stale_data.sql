@@ -1,5 +1,5 @@
 UPDATE knowledge_document SET sync_status = 'PENDING'
-WHERE sync_status = 'INDEXING' AND deleted = 0;
+WHERE sync_status IN ('INDEXING', 'CRAWLING') AND deleted = 0;
 
 UPDATE user_profile SET synthesis_status = 'IDLE'
 WHERE synthesis_status = 'RUNNING';

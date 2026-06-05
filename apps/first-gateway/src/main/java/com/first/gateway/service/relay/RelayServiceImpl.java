@@ -158,6 +158,23 @@ public class RelayServiceImpl implements RelayService {
                     usageRecorder.recordFailure(auth, sel, model, stream, started, e, tpmReserved);
                     throw e;
                 }
+            } catch (Exception e) {
+                channelHealthTracker.recordFailure(sel.channel().getId());
+                GatewayException cause = unwrapGatewayException(e);
+                if (cause != null) {
+                    lastError = cause;
+                    if (!retryPolicy.shouldRetry(i + 1, cause)) {
+                        usageRecorder.recordFailure(auth, sel, model, stream, started, cause, tpmReserved);
+                        throw cause;
+                    }
+                } else {
+                    GatewayException wrapped = new GatewayException(GatewayError.INTERNAL_ERROR, e.getMessage());
+                    if (!retryPolicy.shouldRetry(i + 1, wrapped)) {
+                        usageRecorder.recordFailure(auth, sel, model, stream, started, wrapped, tpmReserved);
+                        throw wrapped;
+                    }
+                    lastError = wrapped;
+                }
             }
         }
         if (lastError != null) {
@@ -184,6 +201,9 @@ public class RelayServiceImpl implements RelayService {
         BigDecimal groupRatio = userGroupService.ratioForUser(auth.user().getId());
 
         List<ChannelSelection> candidates = channelSelector.selectAllForModel(enhancedModel, auth.user().getId());
+        if (candidates.isEmpty()) {
+            throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
+        }
         long reserved = BillingCostCalculator.estimateReserveCost(
             enhancedRequest, candidates.getFirst().model(), groupRatio);
         billingService.preReserve(auth.apiKey().getTenantId(), reserved);
@@ -227,6 +247,9 @@ public class RelayServiceImpl implements RelayService {
         BigDecimal groupRatio = userGroupService.ratioForUser(auth.user().getId());
 
         List<ChannelSelection> candidates = channelSelector.selectAllForModel(enhancedModel, auth.user().getId());
+        if (candidates.isEmpty()) {
+            throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
+        }
         long reserved = BillingCostCalculator.estimateReserveCost(
             enhancedRequest, candidates.getFirst().model(), groupRatio);
         billingService.preReserve(auth.apiKey().getTenantId(), reserved);
@@ -249,7 +272,7 @@ public class RelayServiceImpl implements RelayService {
                         }
                     };
                     try {
-                        boolean viaPython = tryPythonChatStream(auth.user().getId(), auth.apiKey().getTenantId(), selection, upstreamRequest, chunkConsumer);
+                        boolean viaPython = tryPythonChatStream(auth.user().getId(), auth.apiKey().getTenantId(), selection, upstreamRequest, chunkConsumer::accept);
                         if (!viaPython) {
                             openAiAdapter.chatStream(selection.channel(), upstreamRequest, chunkConsumer);
                         }
@@ -285,11 +308,14 @@ public class RelayServiceImpl implements RelayService {
         apiKeyPolicyService.assertModelAllowed(auth.apiKey(), model);
         BigDecimal groupRatio = userGroupService.ratioForUser(auth.user().getId());
 
-        List<ChannelSelection> candidates = channelSelector.selectAllForModel(model, auth.user().getId());
-        Map<String, Object> embedRequest = new HashMap<>(request);
-        embedRequest.putIfAbsent("max_tokens", 1);
+        List<ChannelSelection> candidates = channelSelector.selectAllForEmbeddingModel(model, auth.user().getId());
+        if (candidates.isEmpty()) {
+            throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
+        }
+        Map<String, Object> billingRequest = new HashMap<>(request);
+        billingRequest.putIfAbsent("max_tokens", 1);
         long reserved = BillingCostCalculator.estimateReserveCost(
-            embedRequest, candidates.getFirst().model(), groupRatio);
+            billingRequest, candidates.getFirst().model(), groupRatio);
         billingService.preReserve(auth.apiKey().getTenantId(), reserved);
 
         try {
@@ -382,10 +408,10 @@ public class RelayServiceImpl implements RelayService {
         List<ChatMessage> chatMessages = new ArrayList<>();
         if (upstreamRequest.get("messages") instanceof List<?> msgs) {
             for (Object msg : msgs) {
-                if (msg instanceof Map<?, ?> m) {
-                    chatMessages.add(new ChatMessage(
-                        String.valueOf(m.getOrDefault("role", "user")),
-                        String.valueOf(m.getOrDefault("content", ""))));
+                if (msg instanceof Map m) {
+                    var role = m.getOrDefault("role", "user");
+                    var content = m.getOrDefault("content", "");
+                    chatMessages.add(new ChatMessage(String.valueOf(role), String.valueOf(content)));
                 }
             }
         }
@@ -481,5 +507,12 @@ public class RelayServiceImpl implements RelayService {
 
     static long estimateTokens(Map<String, Object> request) {
         return BillingCostCalculator.estimateTokens(request);
+    }
+
+    private static GatewayException unwrapGatewayException(Exception e) {
+        if (e instanceof GatewayException ge) return ge;
+        if (e.getCause() instanceof GatewayException ge) return ge;
+        if (e instanceof RuntimeException re && re.getCause() instanceof GatewayException ge) return ge;
+        return null;
     }
 }

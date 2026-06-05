@@ -4,6 +4,7 @@ import com.first.gateway.domain.entity.AsyncTask;
 import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.domain.entity.KnowledgeDocument;
+import com.first.gateway.domain.enums.ModelType;
 import com.first.gateway.domain.enums.SyncStatus;
 import com.first.gateway.infra.ai.AiServiceClient;
 import com.first.gateway.infra.ai.dto.*;
@@ -53,16 +54,22 @@ public class DocIndexTaskHandler implements TaskHandler {
         if (doc.getSourceUrl() != null && !doc.getSourceUrl().isBlank()) {
             doc.setSyncStatus(SyncStatus.CRAWLING);
             documentRepository.save(doc);
-            aiServiceClient.crawlAndIndex(new CrawlAndIndexRequest(
+            var crawlResult = aiServiceClient.crawlAndIndex(new CrawlAndIndexRequest(
                 doc.getSourceUrl(), task.getRefExtra(), doc.getId(),
                 upstream.model(), upstream));
+            if (crawlResult.isEmpty()) {
+                throw new RuntimeException("crawlAndIndex returned empty result");
+            }
         } else {
             doc.setSyncStatus(SyncStatus.INDEXING);
             documentRepository.save(doc);
-            aiServiceClient.indexRag(new RagIndexRequest(
+            var indexResult = aiServiceClient.indexRag(new RagIndexRequest(
                 doc.getId(), task.getRefExtra(),
                 doc.getContent(), doc.getFilePath(), doc.getFileType(),
                 upstream.model(), upstream));
+            if (indexResult.isEmpty()) {
+                throw new RuntimeException("indexRag returned empty result");
+            }
         }
     }
 
@@ -86,7 +93,7 @@ public class DocIndexTaskHandler implements TaskHandler {
     }
 
     private UpstreamConfig getEmbeddingUpstream() {
-        List<ChannelModel> models = channelModelRepository.findByModelTypeEnabled("EMBEDDING");
+        List<ChannelModel> models = channelModelRepository.findByModelTypeEnabled(ModelType.EMBEDDING);
         if (models.isEmpty()) {
             throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL, "No embedding model available");
         }

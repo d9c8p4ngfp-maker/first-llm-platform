@@ -64,7 +64,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 rawJwt = extractTokenFromCookie(request);
             }
             if (rawJwt == null) {
-                throw new GatewayException(com.first.gateway.infra.error.GatewayError.UNAUTHORIZED, "missing token");
+                throw new GatewayException(com.first.gateway.infra.error.GatewayError.ACCESS_DENIED, "missing token");
             }
             AdminPrincipal principal = adminAuthService.authenticate(rawJwt);
             request.setAttribute(GatewayRequestAttributes.ADMIN_PRINCIPAL, principal);

@@ -3,6 +3,7 @@ package com.first.gateway.relay.router;
 import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.domain.enums.ChannelStatus;
+import com.first.gateway.domain.enums.ModelType;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
 import com.first.gateway.repository.ChannelModelRepository;
@@ -66,7 +67,7 @@ class ChannelSelectorTest {
     @Test
     void selectBestWithModel_throwsNoAvailableChannelWhenDisabled() {
         when(channelModelRepository.existsByModelNameOrAlias("deepseek-chat")).thenReturn(true);
-        when(channelModelRepository.findByModelNameOrAliasAndEnabled("deepseek-chat"))
+        when(channelModelRepository.findByModelNameOrAliasAndEnabledAndModelType("deepseek-chat", ModelType.CHAT))
             .thenReturn(List.of());
 
         GatewayException ex = assertThrows(GatewayException.class,
@@ -89,7 +90,7 @@ class ChannelSelectorTest {
         model.setModelName("deepseek-chat");
 
         when(channelModelRepository.existsByModelNameOrAlias("deepseek-chat")).thenReturn(true);
-        when(channelModelRepository.findByModelNameOrAliasAndEnabled("deepseek-chat"))
+        when(channelModelRepository.findByModelNameOrAliasAndEnabledAndModelType("deepseek-chat", ModelType.CHAT))
             .thenReturn(List.of(model));
         when(channelRepository.findById(1L)).thenReturn(Optional.of(channel));
 
@@ -107,7 +108,7 @@ class ChannelSelectorTest {
         ChannelModel modelB = modelFor(2L);
 
         when(channelModelRepository.existsByModelNameOrAlias("deepseek-chat")).thenReturn(true);
-        when(channelModelRepository.findByModelNameOrAliasAndEnabled("deepseek-chat"))
+        when(channelModelRepository.findByModelNameOrAliasAndEnabledAndModelType("deepseek-chat", ModelType.CHAT))
             .thenReturn(List.of(modelA, modelB));
         when(channelRepository.findById(1L)).thenReturn(Optional.of(channelA));
         when(channelRepository.findById(2L)).thenReturn(Optional.of(channelB));
@@ -126,7 +127,7 @@ class ChannelSelectorTest {
         ChannelModel modelB = modelFor(2L);
 
         when(channelModelRepository.existsByModelNameOrAlias("deepseek-chat")).thenReturn(true);
-        when(channelModelRepository.findByModelNameOrAliasAndEnabled("deepseek-chat"))
+        when(channelModelRepository.findByModelNameOrAliasAndEnabledAndModelType("deepseek-chat", ModelType.CHAT))
             .thenReturn(List.of(modelA, modelB));
         when(channelRepository.findById(1L)).thenReturn(Optional.of(openChannel));
         when(channelRepository.findById(2L)).thenReturn(Optional.of(closedChannel));
@@ -147,7 +148,7 @@ class ChannelSelectorTest {
         ChannelModel modelB = modelFor(2L);
 
         when(channelModelRepository.existsByModelNameOrAlias("deepseek-chat")).thenReturn(true);
-        when(channelModelRepository.findByModelNameOrAliasAndEnabled("deepseek-chat"))
+        when(channelModelRepository.findByModelNameOrAliasAndEnabledAndModelType("deepseek-chat", ModelType.CHAT))
             .thenReturn(List.of(modelA, modelB));
         when(channelRepository.findById(1L)).thenReturn(Optional.of(channelA));
         when(channelRepository.findById(2L)).thenReturn(Optional.of(channelB));

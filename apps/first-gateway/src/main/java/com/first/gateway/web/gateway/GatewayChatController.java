@@ -1,4 +1,4 @@
-﻿package com.first.gateway.web.gateway;
+package com.first.gateway.web.gateway;
 
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;

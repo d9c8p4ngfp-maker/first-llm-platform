@@ -1,6 +1,7 @@
 package com.first.gateway.domain.entity;
 
 import com.first.gateway.domain.enums.ModelTier;
+import com.first.gateway.domain.enums.ModelType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -42,8 +43,9 @@ public class ChannelModel {
     @Column(nullable = false, length = 20)
     private ModelTier tier = ModelTier.STANDARD;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "model_type", nullable = false, length = 20)
-    private String modelType = "CHAT";
+    private ModelType modelType = ModelType.CHAT;
 
     @Column(nullable = false)
     private Short enabled = 1;

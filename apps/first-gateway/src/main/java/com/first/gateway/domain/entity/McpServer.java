@@ -1,4 +1,4 @@
-﻿package com.first.gateway.domain.entity;
+package com.first.gateway.domain.entity;
 import jakarta.persistence.*; import lombok.Getter; import lombok.Setter; import java.time.Instant;
 @Entity @Table(name = "mcp_server") @Getter @Setter
 public class McpServer {

@@ -1,4 +1,4 @@
-﻿package com.first.gateway.web.workspace;
+package com.first.gateway.web.workspace;
 
 import com.first.gateway.infra.filter.GatewayRequestAttributes;
 import com.first.gateway.service.auth.AuthService;

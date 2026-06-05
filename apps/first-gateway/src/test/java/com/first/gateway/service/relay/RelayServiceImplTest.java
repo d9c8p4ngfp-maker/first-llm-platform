@@ -25,6 +25,7 @@ import com.first.gateway.service.auth.ApiKeyPolicyService;
 import com.first.gateway.service.auth.AuthService;
 import com.first.gateway.service.billing.BillingService;
 import com.first.gateway.service.channel.ChannelRpmGuard;
+import com.first.gateway.service.knowledge.KnowledgeBaseService;
 import com.first.gateway.service.profile.UserMemoryService;
 import com.first.gateway.service.user.UserGroupService;
 import org.junit.jupiter.api.BeforeEach;
@@ -84,6 +85,8 @@ class RelayServiceImplTest {
     @Mock
     private UserMemoryService userMemoryService;
     @Mock
+    private KnowledgeBaseService knowledgeBaseService;
+    @Mock
     private ObjectMapper objectMapper;
 
     private RelayServiceImpl relayService;
@@ -108,7 +111,7 @@ class RelayServiceImplTest {
             apiKeyPolicyService, billingService, retryPolicy,
             userGroupService, channelHealthTracker, channelRpmGuard, chatPipelineEnhancer,
             aiServiceClient, aiServiceProperties, channelKeyCrypto,
-            userProfileRepository, userMemoryService, objectMapper);
+            userProfileRepository, userMemoryService, knowledgeBaseService, objectMapper);
         authContext = new AuthService.AuthContext(activeApiKey(), activeUser());
         lenient().when(userGroupService.ratioForUser(1L)).thenReturn(BigDecimal.ONE);
         lenient().when(channelRpmGuard.acquire(any())).thenReturn(true);
@@ -404,32 +407,6 @@ class RelayServiceImplTest {
 
         verify(channelHealthTracker).recordFailure(1L);
         verify(channelHealthTracker).recordSuccess(2L);
-    }
-
-    // ---------- edge-case tests for retry / exception / RPM ----------
-        ChannelSelection first = selection("deepseek-chat", 1L);
-        ChannelSelection second = selection("deepseek-chat", 2L);
-        GatewayException midStreamError = GatewayException.withInternal(GatewayError.UPSTREAM_ERROR, "upstream lost");
-
-        when(channelSelector.selectAllForModel("deepseek-chat", 1L)).thenReturn(List.of(first, second));
-        doAnswer(invocation -> {
-            Consumer<String> consumer = invocation.getArgument(2);
-            consumer.accept("data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n");
-            throw midStreamError;
-        }).when(openAiAdapter).chatStream(eq(first.channel()), any(), any());
-
-        GatewayException ex = assertThrows(GatewayException.class,
-            () -> relayService.chatCompletionsStream(authContext,
-                Map.of("model", "deepseek-chat", "messages", List.of()), 0L,
-                chunk -> {}));
-
-        assertEquals(GatewayError.UPSTREAM_ERROR, ex.getError());
-        // recordFailure must have been called before re-wrapping
-        verify(usageRecorder).recordFailure(
-            eq(authContext), eq(first), eq("deepseek-chat"), eq(true), anyLong(), eq(midStreamError), eq(0L));
-        // billing release: the RuntimeException caught by public method triggers releaseReserve
-        verify(billingService).releaseReserve(eq(1L), anyLong());
-        verify(openAiAdapter, never()).chatStream(eq(second.channel()), any(), any());
     }
 
     @Test

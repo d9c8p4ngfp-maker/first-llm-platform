@@ -94,7 +94,7 @@ public class MemoryExtractionService {
 
             List<UserMemory> existing = memoryService.listForUser(userId, null);
 
-            String promptText = pipelineConfigService.getPromptText("memory.extraction", userId);
+            String promptText = config.getPromptText();
 
             List<Map<String, Object>> items = callExtraction(config, userId, existing, userMessage,
                 assistantMessage, promptText);
@@ -139,6 +139,7 @@ public class MemoryExtractionService {
                         try {
                             memory.setScheduleDate(LocalDate.parse(schedDate));
                         } catch (DateTimeParseException ignored) {}
+                    }
                     memory.setScheduleTime((String) item.get("schedule_time"));
 
                     Object numVal = item.get("numeric_value");

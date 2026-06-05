@@ -18,10 +18,17 @@ VALUES (1, 'SUBSCRIPTION', 5000000, 0, CURRENT_DATE);
 INSERT INTO channel (id, name, type, provider, base_url, api_key_encrypted, priority, weight, status, max_rpm)
 VALUES (1, 'DeepSeek Test', 'OPENAI', 'deepseek', 'https://api.deepseek.com', 'REPLACE_WITH_ENCRYPTED_KEY', 10, 10, 'ACTIVE', 0);
 
+INSERT INTO channel (id, name, type, provider, base_url, api_key_encrypted, priority, weight, status, max_rpm)
+VALUES (2, 'OpenAI Embedding', 'OPENAI', 'openai', 'https://api.openai.com', 'REPLACE_WITH_ENCRYPTED_KEY', 5, 10, 'ACTIVE', 0);
+
+INSERT INTO channel (id, name, type, provider, base_url, api_key_encrypted, priority, weight, status, max_rpm)
+VALUES (3, 'Bailian Embedding', 'OPENAI', 'bailian', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'REPLACE_WITH_ENCRYPTED_KEY', 6, 10, 'ACTIVE', 0);
+
 INSERT INTO channel_model (channel_id, model_name, model_alias, input_ratio, output_ratio, tier, enabled)
 VALUES
     (1, 'deepseek-chat', 'deepseek-chat', 1.0000, 1.0000, 'STANDARD', 1),
-    (1, 'deepseek-reasoner', 'deepseek-reasoner', 1.0000, 1.0000, 'PREMIUM', 1);
+    (1, 'deepseek-reasoner', 'deepseek-reasoner', 1.0000, 1.0000, 'PREMIUM', 1),
+    (3, 'text-embedding-v4', 'text-embedding-v4', 1.0000, 0.0000, 'STANDARD', 1);
 
 INSERT INTO system_config (config_key, config_value, description) VALUES
     ('quota_for_new_user', '100000', '新用户赠送额度'),

@@ -1,4 +1,4 @@
-﻿package com.first.gateway.web.support;
+package com.first.gateway.web.support;
 
 import com.first.gateway.service.auth.AuthService;
 import com.first.gateway.service.relay.RelayService;

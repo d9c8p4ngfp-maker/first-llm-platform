@@ -271,7 +271,7 @@ public class AiServiceClient {
         }
         try {
             CrawlAndIndexResponse body = webClient.post()
-                .uri("/ai/rag/crawl")
+                .uri("/ai/rag/crawl-and-index")
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .bodyValue(request)

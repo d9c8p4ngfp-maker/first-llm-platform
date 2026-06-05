@@ -1,6 +1,7 @@
 package com.first.gateway.repository;
 
 import com.first.gateway.domain.entity.ChannelModel;
+import com.first.gateway.domain.enums.ModelType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,7 +29,7 @@ public interface ChannelModelRepository extends JpaRepository<ChannelModel, Long
           AND cm.modelType = :modelType
         """)
     List<ChannelModel> findByModelNameOrAliasAndEnabledAndModelType(
-        @Param("model") String model, @Param("modelType") String modelType);
+        @Param("model") String model, @Param("modelType") ModelType modelType);
 
     @Query("""
         SELECT CASE WHEN COUNT(cm) > 0 THEN true ELSE false END
@@ -56,5 +57,5 @@ public interface ChannelModelRepository extends JpaRepository<ChannelModel, Long
           AND c.deleted = 0
         ORDER BY c.priority DESC, c.weight DESC
         """)
-    List<ChannelModel> findByModelTypeEnabled(@Param("modelType") String modelType);
+    List<ChannelModel> findByModelTypeEnabled(@Param("modelType") ModelType modelType);
 }

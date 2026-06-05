@@ -110,21 +110,21 @@ public class WorkspaceKnowledgeController {
 
     @PostMapping("/public")
     public KnowledgeBase createPublicKb(@Valid @RequestBody KnowledgeBaseRequest body, HttpServletRequest request) {
-        AdminPrincipal principal = (AdminPrincipal) request.getAttribute("principal");
+        AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         AdminAccess.requirePlatformAdmin(principal);
         return knowledgeBaseService.createPublicKnowledgeBase(body.name(), body.description());
     }
 
     @GetMapping("/public")
     public List<KnowledgeBase> listPublicKbs(HttpServletRequest request) {
-        AdminPrincipal principal = (AdminPrincipal) request.getAttribute("principal");
+        AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         AdminAccess.requirePlatformAdmin(principal);
         return knowledgeBaseRepository.findByVisibilityAndDeletedAndStatus("PUBLIC", (short) 0, "ACTIVE");
     }
 
     @PostMapping("/{id}/import-url")
     public KnowledgeDocument importUrl(@PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
-        AdminPrincipal principal = (AdminPrincipal) request.getAttribute("principal");
+        AdminPrincipal principal = WorkspaceAccess.requirePrincipal(WorkspaceRequest.principal(request));
         String url = body.get("url");
         String title = body.get("title");
         return knowledgeBaseService.importFromUrl(id, principal.tenantId(), principal.userId(), url, title);

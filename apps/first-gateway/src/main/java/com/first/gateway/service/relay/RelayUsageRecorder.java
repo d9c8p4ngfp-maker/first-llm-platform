@@ -71,10 +71,10 @@ public class RelayUsageRecorder {
         long latencyMs = System.currentTimeMillis() - started;
         long actual = BillingCostCalculator.computeCost(
             promptTokens, completionTokens, selection.model(), groupRatio);
-        TokenUsageLog log = saveLog(auth, selection, requestedModel, stream, started,
+        TokenUsageLog usageLog = saveLog(auth, selection, requestedModel, stream, started,
             promptTokens, completionTokens, totalTokens, "SUCCESS", null);
         billingService.settle(
-            auth.apiKey().getTenantId(), auth.user().getId(), reserved, actual, log.getId());
+            auth.apiKey().getTenantId(), auth.user().getId(), reserved, actual, usageLog.getId());
         touchApiKey(auth.apiKey(), actual);
         tpmRateLimiter.refund(auth.apiKey(), tpmReserved, totalTokens);
         recordMetrics(auth, selection, requestedModel, promptTokens, completionTokens, totalTokens,

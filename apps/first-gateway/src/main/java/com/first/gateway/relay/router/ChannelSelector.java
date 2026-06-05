@@ -3,6 +3,7 @@ package com.first.gateway.relay.router;
 import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.domain.enums.ChannelStatus;
+import com.first.gateway.domain.enums.ModelType;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
 import com.first.gateway.repository.ChannelModelRepository;
@@ -67,10 +68,26 @@ public class ChannelSelector {
             throw new GatewayException(GatewayError.MODEL_NOT_FOUND);
         }
         List<ChannelModel> models = channelModelRepository
-            .findByModelNameOrAliasAndEnabledAndModelType(model, "CHAT");
+            .findByModelNameOrAliasAndEnabledAndModelType(model, ModelType.CHAT);
         if (models.isEmpty()) {
             throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
         }
+        return selectionsFromModels(models, userId);
+    }
+
+    public List<ChannelSelection> selectAllForEmbeddingModel(String model, Long userId) {
+        if (!channelModelRepository.existsByModelNameOrAlias(model)) {
+            throw new GatewayException(GatewayError.MODEL_NOT_FOUND);
+        }
+        List<ChannelModel> models = channelModelRepository
+            .findByModelNameOrAliasAndEnabledAndModelType(model, ModelType.EMBEDDING);
+        if (models.isEmpty()) {
+            throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
+        }
+        return selectionsFromModels(models, userId);
+    }
+
+    private List<ChannelSelection> selectionsFromModels(List<ChannelModel> models, Long userId) {
         List<ChannelSelection> selections = models.stream()
             .map(cm -> channelRepository.findById(cm.getChannelId())
                 .filter(ch -> isSelectableForUser(ch, userId))

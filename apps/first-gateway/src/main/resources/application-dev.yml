@@ -41,6 +41,7 @@ gateway:
     channel-key-secret: ${CHANNEL_KEY_SECRET:dev-channel-key-secret}
   upstream:
     deepseek-api-key: ${DEEPSEEK_API_KEY:}
+    bailian-api-key: ${BAILIAN_API_KEY:}
 
 ai-service:
   enabled: true
