@@ -13,6 +13,8 @@ import com.first.gateway.infra.ai.dto.EmbedRequest;
 import com.first.gateway.infra.ai.dto.EmbedResponse;
 import com.first.gateway.infra.ai.dto.MemoryContext;
 import com.first.gateway.infra.ai.dto.ModelParams;
+import com.first.gateway.infra.ai.dto.RagChunkResult;
+import com.first.gateway.infra.ai.dto.RagQueryResponse;
 import com.first.gateway.infra.ai.dto.UpstreamConfig;
 import com.first.gateway.infra.ai.dto.UserProfileContext;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
@@ -30,6 +32,7 @@ import com.first.gateway.service.auth.AuthService;
 import com.first.gateway.service.billing.BillingCostCalculator;
 import com.first.gateway.service.billing.BillingService;
 import com.first.gateway.service.channel.ChannelRpmGuard;
+import com.first.gateway.service.knowledge.KnowledgeBaseService;
 import com.first.gateway.service.profile.UserMemoryService;
 import com.first.gateway.service.user.UserGroupService;
 import org.slf4j.Logger;
@@ -71,6 +74,7 @@ public class RelayServiceImpl implements RelayService {
     private final ChannelKeyCrypto channelKeyCrypto;
     private final UserProfileRepository userProfileRepository;
     private final UserMemoryService userMemoryService;
+    private final KnowledgeBaseService knowledgeBaseService;
     private final ObjectMapper objectMapper;
 
     public RelayServiceImpl(ChannelSelector channelSelector,
@@ -89,6 +93,7 @@ public class RelayServiceImpl implements RelayService {
                             ChannelKeyCrypto channelKeyCrypto,
                             UserProfileRepository userProfileRepository,
                             UserMemoryService userMemoryService,
+                            KnowledgeBaseService knowledgeBaseService,
                             ObjectMapper objectMapper) {
         this.channelSelector = channelSelector;
         this.openAiAdapter = openAiAdapter;
@@ -106,6 +111,7 @@ public class RelayServiceImpl implements RelayService {
         this.channelKeyCrypto = channelKeyCrypto;
         this.userProfileRepository = userProfileRepository;
         this.userMemoryService = userMemoryService;
+        this.knowledgeBaseService = knowledgeBaseService;
         this.objectMapper = objectMapper;
     }
 
@@ -186,7 +192,7 @@ public class RelayServiceImpl implements RelayService {
             return executeWithChannelFallback(candidates, auth, enhancedModel, false, started, tpmReserved,
                 (selection) -> {
                     Map<String, Object> upstreamRequest = buildUpstreamRequest(enhancedRequest, selection.model());
-                    Map<String, Object> response = tryPythonChat(auth.user().getId(), selection, upstreamRequest, false)
+                    Map<String, Object> response = tryPythonChat(auth.user().getId(), auth.apiKey().getTenantId(), selection, upstreamRequest, false)
                         .orElseGet(() -> openAiAdapter.chat(selection.channel(), upstreamRequest));
                     UsageParser.TokenUsage usage = usageParser.fromResponse(response);
                     usageRecorder.recordSuccess(auth, selection, enhancedModel, false, started,
@@ -243,7 +249,7 @@ public class RelayServiceImpl implements RelayService {
                         }
                     };
                     try {
-                        boolean viaPython = tryPythonChatStream(auth.user().getId(), selection, upstreamRequest, chunkConsumer);
+                        boolean viaPython = tryPythonChatStream(auth.user().getId(), auth.apiKey().getTenantId(), selection, upstreamRequest, chunkConsumer);
                         if (!viaPython) {
                             openAiAdapter.chatStream(selection.channel(), upstreamRequest, chunkConsumer);
                         }
@@ -331,12 +337,12 @@ public class RelayServiceImpl implements RelayService {
         }
     }
 
-    private Optional<Map<String, Object>> tryPythonChat(Long userId, ChannelSelection selection,
+    private Optional<Map<String, Object>> tryPythonChat(Long userId, Long tenantId, ChannelSelection selection,
                                                           Map<String, Object> upstreamRequest, boolean stream) {
         if (!aiServiceProperties.isChat() || !aiServiceClient.isHealthy()) {
             return Optional.empty();
         }
-        ChatRequest body = buildPythonChatBody(userId, selection, upstreamRequest, stream);
+        ChatRequest body = buildPythonChatBody(userId, tenantId, selection, upstreamRequest, stream);
         Optional<Map<String, Object>> response = aiServiceClient.chat(body);
         if (response.isPresent()) {
             log.debug("Chat via first-ai-service for user {}", userId);
@@ -344,12 +350,12 @@ public class RelayServiceImpl implements RelayService {
         return response;
     }
 
-    private boolean tryPythonChatStream(Long userId, ChannelSelection selection,
+    private boolean tryPythonChatStream(Long userId, Long tenantId, ChannelSelection selection,
                                         Map<String, Object> upstreamRequest, StreamConsumer consumer) {
         if (!aiServiceProperties.isChat() || !aiServiceClient.isHealthy()) {
             return false;
         }
-        ChatRequest body = buildPythonChatBody(userId, selection, upstreamRequest, true);
+        ChatRequest body = buildPythonChatBody(userId, tenantId, selection, upstreamRequest, true);
         boolean ok = aiServiceClient.chatStream(body, chunk -> consumer.accept(chunk));
         if (ok) {
             log.debug("Chat stream via first-ai-service for user {}", userId);
@@ -358,7 +364,7 @@ public class RelayServiceImpl implements RelayService {
     }
 
     @SuppressWarnings("unchecked")
-    private ChatRequest buildPythonChatBody(Long userId, ChannelSelection selection,
+    private ChatRequest buildPythonChatBody(Long userId, Long tenantId, ChannelSelection selection,
                                               Map<String, Object> upstreamRequest, boolean stream) {
         Channel channel = selection.channel();
 
@@ -411,6 +417,16 @@ public class RelayServiceImpl implements RelayService {
             channelKeyCrypto.decrypt(channel.getApiKeyEncrypted()),
             selection.model().getModelName());
 
+        List<Number> kbIds = (List<Number>) upstreamRequest.get("x_knowledge_base_ids");
+        List<RagChunkResult> ragContext = List.of();
+        if (kbIds != null && !kbIds.isEmpty()) {
+            String query = extractLastUserMessage(upstreamRequest);
+            if (query != null && !query.isBlank()) {
+                var ragResult = knowledgeBaseService.searchAll(tenantId, query, 5);
+                ragContext = ragResult.map(RagQueryResponse::chunks).orElse(List.of());
+            }
+        }
+
         return new ChatRequest(
             selection.model().getModelName(),
             chatMessages,
@@ -418,9 +434,23 @@ public class RelayServiceImpl implements RelayService {
             modelParams,
             profileCtx,
             memCtxs,
-            null,
+            ragContext,
             tools,
             upstream);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractLastUserMessage(Map<String, Object> request) {
+        Object messages = request.get("messages");
+        if (!(messages instanceof List<?>)) return null;
+        List<Map<String, Object>> list = (List<Map<String, Object>>) messages;
+        for (int i = list.size() - 1; i >= 0; i--) {
+            Map<String, Object> msg = list.get(i);
+            if ("user".equals(msg.get("role"))) {
+                return String.valueOf(msg.getOrDefault("content", ""));
+            }
+        }
+        return null;
     }
 
     private List<String> parseTags(String aiTags) {
