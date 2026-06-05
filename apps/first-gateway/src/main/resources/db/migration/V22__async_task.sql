@@ -1,0 +1,17 @@
+CREATE TABLE async_task (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    task_type VARCHAR(30) NOT NULL COMMENT 'DOC_INDEX / PROFILE_SYNTHESIS',
+    ref_id BIGINT NOT NULL COMMENT '关联的业务 ID',
+    ref_extra BIGINT DEFAULT NULL COMMENT '额外关联（如 knowledge_base_id）',
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/RUNNING/DONE/FAILED',
+    started_at TIMESTAMP DEFAULT NULL COMMENT '开始处理时间，超时检测用',
+    finished_at TIMESTAMP DEFAULT NULL COMMENT '完成时间',
+    retry_count INT NOT NULL DEFAULT 0,
+    max_retry INT NOT NULL DEFAULT 3,
+    error_message TEXT DEFAULT NULL,
+    payload JSON DEFAULT NULL COMMENT '任务参数',
+    version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_status_type_created (status, task_type, created_at)
+) COMMENT '统一异步任务表';
