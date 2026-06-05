@@ -1,4 +1,5 @@
 package com.first.gateway.domain.entity;
+import com.first.gateway.domain.enums.SynthesisStatus;
 import jakarta.persistence.*; import lombok.Getter; import lombok.Setter; import java.time.Instant;
 @Entity @Table(name = "user_profile") @Getter @Setter
 public class UserProfile {
@@ -20,7 +21,8 @@ public class UserProfile {
     @Version
     @Column(nullable = false) private Integer version = 0;
     @Column(name = "last_synthesis_count") private Integer lastSynthesisCount = 0;
-    @Column(name = "synthesis_status", nullable = false, length = 20) private String synthesisStatus = "IDLE";
+    @Enumerated(EnumType.STRING)
+    @Column(name = "synthesis_status", nullable = false, length = 20) private SynthesisStatus synthesisStatus = SynthesisStatus.IDLE;
     @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
     @PrePersist void onCreate() { Instant n = Instant.now(); createdAt = n; updatedAt = n; }

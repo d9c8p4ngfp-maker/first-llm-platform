@@ -3,6 +3,7 @@ package com.first.gateway.service.profile;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.first.gateway.domain.entity.UserProfile;
+import com.first.gateway.domain.enums.SynthesisStatus;
 import com.first.gateway.repository.UserProfileRepository;
 import com.first.gateway.service.profile.ProfileSynthesisService;
 import org.springframework.context.annotation.Lazy;
@@ -83,7 +84,7 @@ public class UserProfileService {
     @Transactional
     public Map<String, Object> refresh(Long userId, Long tenantId) {
         UserProfile profile = self.getOrCreate(userId, tenantId);
-        if ("RUNNING".equals(profile.getSynthesisStatus())) {
+        if (SynthesisStatus.RUNNING == profile.getSynthesisStatus()) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("status", "running");
             body.put("message", "profile synthesis is already in progress");

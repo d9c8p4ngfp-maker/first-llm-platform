@@ -7,6 +7,7 @@ import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.entity.PipelineConfig;
 import com.first.gateway.domain.entity.UserMemory;
 import com.first.gateway.domain.entity.UserProfile;
+import com.first.gateway.domain.enums.SynthesisStatus;
 import com.first.gateway.infra.ai.AiServiceClient;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.relay.router.ChannelSelector;
@@ -76,12 +77,12 @@ public class ProfileSynthesisService {
             UserProfile profile = profileRepository.findByUserId(userId).orElse(null);
             if (profile == null) return;
 
-            if ("RUNNING".equals(profile.getSynthesisStatus())) {
+            if (SynthesisStatus.RUNNING == profile.getSynthesisStatus()) {
                 log.info("Profile synthesis already running for user {}", userId);
                 return;
             }
 
-            profile.setSynthesisStatus("RUNNING");
+            profile.setSynthesisStatus(SynthesisStatus.RUNNING);
             profileRepository.save(profile);
 
             PipelineConfig config;
@@ -99,7 +100,7 @@ public class ProfileSynthesisService {
             boolean updated = applySynthesis(userId, profile, activeMemories, config);
 
             profile.setLastSynthesisCount(profile.getMemoryCount());
-            profile.setSynthesisStatus(updated ? "IDLE" : "IDLE");
+            profile.setSynthesisStatus(SynthesisStatus.IDLE);
             profile.setVersion((profile.getVersion() != null ? profile.getVersion() : 0) + 1);
             profileRepository.save(profile);
 
@@ -107,7 +108,7 @@ public class ProfileSynthesisService {
         } catch (Exception e) {
             log.error("Profile synthesis failed for user {}: {}", userId, e.getMessage(), e);
             profileRepository.findByUserId(userId).ifPresent(p -> {
-                p.setSynthesisStatus("FAILED");
+                p.setSynthesisStatus(SynthesisStatus.FAILED);
                 profileRepository.save(p);
             });
         }
