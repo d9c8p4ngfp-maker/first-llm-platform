@@ -1,6 +1,7 @@
 package com.first.gateway.service.auth.admin;
 
 import com.first.gateway.config.AuthProperties;
+import com.first.gateway.domain.enums.TenantRole;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +32,7 @@ class JwtServiceTest {
 
     @Test
     void createToken_andParseToken_roundTrip() {
-        AdminPrincipal principal = new AdminPrincipal(1L, 10L, "admin", "OWNER");
+        AdminPrincipal principal = new AdminPrincipal(1L, 10L, "admin", TenantRole.PLATFORM_ADMIN);
 
         String token = jwtService.createToken(principal);
         AdminPrincipal parsed = jwtService.parseToken(token);
@@ -46,7 +47,7 @@ class JwtServiceTest {
 
     @Test
     void isBlacklisted_redisUnavailable_throwsServiceUnavailable() {
-        AdminPrincipal principal = new AdminPrincipal(1L, 10L, "admin", "PLATFORM_ADMIN");
+        AdminPrincipal principal = new AdminPrincipal(1L, 10L, "admin", TenantRole.PLATFORM_ADMIN);
         String token = jwtService.createToken(principal);
         doThrow(new GatewayException(GatewayError.SERVICE_UNAVAILABLE))
             .when(blacklistStore).contains(org.mockito.ArgumentMatchers.anyString());

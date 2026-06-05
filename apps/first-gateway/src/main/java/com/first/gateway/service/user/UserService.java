@@ -5,6 +5,7 @@ import com.first.gateway.domain.entity.Tenant;
 import com.first.gateway.domain.entity.User;
 import com.first.gateway.domain.entity.UserGroup;
 import com.first.gateway.domain.entity.UserTenantRel;
+import com.first.gateway.domain.enums.TenantRole;
 import com.first.gateway.domain.enums.UserStatus;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
@@ -76,7 +77,7 @@ public class UserService {
         UserTenantRel rel = new UserTenantRel();
         rel.setUserId(user.getId());
         rel.setTenantId(tenant.getId());
-        rel.setRole("MEMBER");
+        rel.setRole(TenantRole.MEMBER);
         userTenantRelRepository.save(rel);
 
         long defaultQuota = systemConfigService.getLong("quota_for_new_user", 100_000L);

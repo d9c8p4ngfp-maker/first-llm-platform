@@ -1,6 +1,7 @@
 package com.first.gateway.service.auth.admin;
 
 import com.first.gateway.config.AuthProperties;
+import com.first.gateway.domain.enums.TenantRole;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
 import io.jsonwebtoken.Claims;
@@ -39,7 +40,7 @@ public class JwtService {
             .subject(String.valueOf(principal.userId()))
             .claim("tenantId", principal.tenantId())
             .claim("username", principal.username())
-            .claim("role", principal.role())
+            .claim("role", principal.role().name())
             .issuedAt(Date.from(now))
             .expiration(Date.from(expiresAt))
             .signWith(secretKey)
@@ -57,7 +58,7 @@ public class JwtService {
                 Long.parseLong(claims.getSubject()),
                 claims.get("tenantId", Number.class).longValue(),
                 claims.get("username", String.class),
-                claims.get("role", String.class)
+                TenantRole.valueOf(claims.get("role", String.class))
             );
         } catch (Exception ex) {
             throw new GatewayException(GatewayError.INVALID_JWT);

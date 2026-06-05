@@ -2,6 +2,7 @@ package com.first.gateway.infra.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.first.gateway.domain.entity.User;
+import com.first.gateway.domain.enums.TenantRole;
 import com.first.gateway.domain.enums.UserStatus;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
@@ -67,7 +68,7 @@ class JwtAuthFilterTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/admin/users");
         request.addHeader("Authorization", "Bearer jwt-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
-        AdminPrincipal principal = new AdminPrincipal(1L, 1L, "admin", "OWNER");
+        AdminPrincipal principal = new AdminPrincipal(1L, 1L, "admin", TenantRole.PLATFORM_ADMIN);
         when(adminAuthService.authenticate("jwt-token")).thenReturn(principal);
 
         filter.doFilterInternal(request, response, filterChain);

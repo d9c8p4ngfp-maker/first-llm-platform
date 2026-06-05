@@ -1,5 +1,6 @@
 package com.first.gateway.domain.entity;
 
+import com.first.gateway.domain.enums.TenantRole;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,8 +23,9 @@ public class UserTenantRel {
     @Column(name = "tenant_id", nullable = false)
     private Long tenantId;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private String role = "MEMBER";
+    private TenantRole role = TenantRole.MEMBER;
 
     @Column(name = "joined_at", nullable = false, updatable = false)
     private Instant joinedAt;
