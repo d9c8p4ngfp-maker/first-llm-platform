@@ -8,6 +8,9 @@ import com.first.gateway.domain.enums.ChannelStatus;
 import com.first.gateway.domain.enums.SourceType;
 import com.first.gateway.domain.enums.SyncStatus;
 import com.first.gateway.infra.ai.AiServiceClient;
+import com.first.gateway.infra.ai.dto.RagIndexRequest;
+import com.first.gateway.infra.ai.dto.RagQueryRequest;
+import com.first.gateway.infra.ai.dto.UpstreamConfig;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
@@ -22,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -136,7 +138,6 @@ public class KnowledgeBaseService {
         return createDocument(kbId, tenantId, userId, title, content);
     }
 
-    @SuppressWarnings("unchecked")
     public List<Map<String, Object>> search(Long kbId, Long tenantId, String query, int topK) {
         requireByTenant(kbId, tenantId);
 
@@ -146,16 +147,27 @@ public class KnowledgeBaseService {
 
         if (aiServiceProperties.isRag() && aiServiceClient.isHealthy()) {
             try {
-                Map<String, Object> ragRequest = new LinkedHashMap<>();
-                ragRequest.put("query", query);
-                ragRequest.put("knowledge_base_ids", List.of(kbId));
-                ragRequest.put("top_k", topK);
-                ragRequest.put("embedding_model", aiServiceProperties.getEmbeddingModel());
-                ragRequest.put("upstream", getDefaultUpstream());
+                RagQueryRequest ragRequest = new RagQueryRequest(
+                    query, List.of(kbId), topK,
+                    aiServiceProperties.getEmbeddingModel(),
+                    getDefaultUpstream());
 
-                var chunks = aiServiceClient.queryRag(ragRequest);
-                if (chunks.isPresent() && !chunks.get().isEmpty()) {
-                    return (List<Map<String, Object>>) (List<?>) chunks.get();
+                var response = aiServiceClient.queryRag(ragRequest);
+                if (response.isPresent() && response.get().chunks() != null
+                    && !response.get().chunks().isEmpty()) {
+                    return response.get().chunks().stream()
+                        .map(c -> {
+                            Map<String, Object> m = new java.util.LinkedHashMap<>();
+                            m.put("document_id", c.documentId());
+                            m.put("knowledge_base_id", c.knowledgeBaseId());
+                            m.put("content", c.content());
+                            m.put("score", c.score());
+                            m.put("title", c.metadata() != null ? c.metadata().getOrDefault("title", "") : "");
+                            m.put("snippet", c.content() != null && c.content().length() > 200
+                                ? c.content().substring(0, 200) : (c.content() != null ? c.content() : ""));
+                            return m;
+                        })
+                        .toList();
                 }
             } catch (Exception e) {
                 log.warn("RAG query failed for kb {}: {}", kbId, e.getMessage());
@@ -205,13 +217,12 @@ public class KnowledgeBaseService {
         }
         CompletableFuture.runAsync(() -> {
             try {
-                Map<String, Object> indexRequest = new LinkedHashMap<>();
-                indexRequest.put("document_id", doc.getId());
-                indexRequest.put("knowledge_base_id", kbId);
-                indexRequest.put("content", doc.getContent());
-                indexRequest.put("file_type", doc.getFileType() != null ? doc.getFileType() : "TEXT");
-                indexRequest.put("embedding_model", aiServiceProperties.getEmbeddingModel());
-                indexRequest.put("upstream", getDefaultUpstream());
+                RagIndexRequest indexRequest = new RagIndexRequest(
+                    doc.getId(), kbId, doc.getContent(),
+                    null,
+                    doc.getFileType() != null ? doc.getFileType() : "TEXT",
+                    aiServiceProperties.getEmbeddingModel(),
+                    getDefaultUpstream());
                 aiServiceClient.indexRag(indexRequest);
                 doc.setSyncStatus(SyncStatus.INDEXED);
                 log.info("RAG index success for doc {}", doc.getId());
@@ -224,20 +235,15 @@ public class KnowledgeBaseService {
         });
     }
 
-    private Map<String, Object> getDefaultUpstream() {
+    private UpstreamConfig getDefaultUpstream() {
         List<Channel> channels = channelRepository.findByStatusOrderByPriorityDescWeightDesc(ChannelStatus.ACTIVE);
         if (channels.isEmpty()) {
-            return Map.of(
-                "base_url", "https://api.openai.com",
-                "api_key", "",
-                "model", aiServiceProperties.getEmbeddingModel()
-            );
+            return new UpstreamConfig("https://api.openai.com", "", aiServiceProperties.getEmbeddingModel());
         }
         Channel channel = channels.getFirst();
-        return Map.of(
-            "base_url", channel.getBaseUrl(),
-            "api_key", channelKeyCrypto.decrypt(channel.getApiKeyEncrypted()),
-            "model", aiServiceProperties.getEmbeddingModel()
-        );
+        return new UpstreamConfig(
+            channel.getBaseUrl(),
+            channelKeyCrypto.decrypt(channel.getApiKeyEncrypted()),
+            aiServiceProperties.getEmbeddingModel());
     }
 }

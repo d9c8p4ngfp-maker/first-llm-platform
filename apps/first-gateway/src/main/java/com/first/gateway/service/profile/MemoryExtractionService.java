@@ -1,6 +1,5 @@
 package com.first.gateway.service.profile;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.first.gateway.config.AiServiceProperties;
 import com.first.gateway.domain.entity.PipelineConfig;
@@ -9,6 +8,13 @@ import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.enums.MemoryCategory;
 import com.first.gateway.domain.enums.MemoryStatus;
 import com.first.gateway.infra.ai.AiServiceClient;
+import com.first.gateway.infra.ai.dto.ChatMessage;
+import com.first.gateway.infra.ai.dto.ExistingMemoryRef;
+import com.first.gateway.infra.ai.dto.MemoryExtractRequest;
+import com.first.gateway.infra.ai.dto.MemoryExtractResponse;
+import com.first.gateway.infra.ai.dto.ModelConfig;
+import com.first.gateway.infra.ai.dto.ModelParams;
+import com.first.gateway.infra.ai.dto.UpstreamConfig;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.relay.router.ChannelSelector;
 import com.first.gateway.service.pipeline.PipelineConfigService;
@@ -165,75 +171,79 @@ public class MemoryExtractionService {
                                                       String userMessage, String assistantMessage,
                                                       String promptText) {
         if (aiServiceProperties.isMemoryExtraction() && aiServiceClient.isHealthy()) {
-            Optional<List<Map<String, Object>>> viaPython = callExtractionViaPython(
+            Optional<MemoryExtractResponse> viaPython = callExtractionViaPython(
                 config, userId, existing, userMessage, assistantMessage, promptText);
-            if (viaPython.isPresent()) {
+            if (viaPython.isPresent() && viaPython.get().memories() != null) {
                 log.info("Memory extraction via first-ai-service for user {}", userId);
-                return viaPython.get();
+                return viaPython.get().memories().stream()
+                    .map(m -> {
+                        Map<String, Object> map = new LinkedHashMap<>();
+                        map.put("category", m.category());
+                        map.put("content", m.content());
+                        map.put("importance", m.importance());
+                        if (m.scheduleDate() != null) map.put("schedule_date", m.scheduleDate());
+                        if (m.scheduleTime() != null) map.put("schedule_time", m.scheduleTime());
+                        if (m.numericValue() != null) map.put("numeric_value", m.numericValue());
+                        if (m.unit() != null) map.put("unit", m.unit());
+                        return map;
+                    })
+                    .toList();
             }
         }
         log.error("Memory extraction unavailable for user {}", userId);
         return Collections.emptyList();
     }
 
-    private Optional<List<Map<String, Object>>> callExtractionViaPython(PipelineConfig config, Long userId,
-                                                                          List<UserMemory> existing,
-                                                                          String userMessage,
-                                                                          String assistantMessage,
-                                                                          String promptText) {
+    private Optional<MemoryExtractResponse> callExtractionViaPython(PipelineConfig config, Long userId,
+                                                                      List<UserMemory> existing,
+                                                                      String userMessage,
+                                                                      String assistantMessage,
+                                                                      String promptText) {
         try {
             String model = config.getModelId() != null && !config.getModelId().isBlank()
                 ? config.getModelId() : "deepseek-chat";
             Channel channel = channelSelector.selectForModel(model, userId);
 
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("conversation_segment", List.of(
-                Map.of("role", "user", "content", userMessage),
-                Map.of("role", "assistant", "content", assistantMessage)
-            ));
-            body.put("existing_memories", formatExistingForPython(existing));
+            MemoryExtractRequest req = new MemoryExtractRequest(
+                List.of(
+                    new ChatMessage("user", userMessage),
+                    new ChatMessage("assistant", assistantMessage)
+                ),
+                formatExistingForPython(existing),
+                new ModelConfig(model, parseModelParams(config.getModelParams()), promptText),
+                new UpstreamConfig(
+                    channel.getBaseUrl(),
+                    channelKeyCrypto.decrypt(channel.getApiKeyEncrypted()),
+                    model));
 
-            Map<String, Object> cfg = new LinkedHashMap<>();
-            cfg.put("model", model);
-            cfg.put("model_params", parseModelParams(config.getModelParams()));
-            cfg.put("prompt_override", promptText);
-            body.put("config", cfg);
-
-            Map<String, Object> upstream = new LinkedHashMap<>();
-            upstream.put("base_url", channel.getBaseUrl());
-            upstream.put("api_key", channelKeyCrypto.decrypt(channel.getApiKeyEncrypted()));
-            upstream.put("model", model);
-            body.put("upstream", upstream);
-
-            return aiServiceClient.extractMemories(body);
+            return aiServiceClient.extractMemories(req);
         } catch (RuntimeException e) {
             log.warn("callExtractionViaPython failed: {}", e.getMessage());
             return Optional.empty();
         }
     }
 
-    private List<Map<String, Object>> formatExistingForPython(List<UserMemory> memories) {
-        List<Map<String, Object>> list = new ArrayList<>();
+    private List<ExistingMemoryRef> formatExistingForPython(List<UserMemory> memories) {
+        List<ExistingMemoryRef> list = new ArrayList<>();
         int limit = Math.min(memories.size(), MAX_EXISTING_MEMORIES);
         for (int i = 0; i < limit; i++) {
             UserMemory m = memories.get(i);
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", m.getId());
-            row.put("category", m.getCategory());
-            row.put("content", m.getContent());
-            list.add(row);
+            list.add(new ExistingMemoryRef(
+                m.getId(),
+                m.getCategory() != null ? m.getCategory().name() : "",
+                m.getContent()));
         }
         return list;
     }
 
-    private Map<String, Object> parseModelParams(String modelParamsJson) {
+    private ModelParams parseModelParams(String modelParamsJson) {
         if (modelParamsJson == null || modelParamsJson.isBlank()) {
-            return Map.of("temperature", DEFAULT_MEMORY_TEMPERATURE, "max_tokens", DEFAULT_MEMORY_MAX_TOKENS);
+            return new ModelParams(DEFAULT_MEMORY_TEMPERATURE, DEFAULT_MEMORY_MAX_TOKENS);
         }
         try {
-            return objectMapper.readValue(modelParamsJson, new TypeReference<>() {});
+            return objectMapper.readValue(modelParamsJson, ModelParams.class);
         } catch (IOException e) {
-            return Map.of("temperature", DEFAULT_MEMORY_TEMPERATURE, "max_tokens", DEFAULT_MEMORY_MAX_TOKENS);
+            return new ModelParams(DEFAULT_MEMORY_TEMPERATURE, DEFAULT_MEMORY_MAX_TOKENS);
         }
     }
 

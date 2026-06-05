@@ -7,6 +7,14 @@ import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.entity.UserMemory;
 import com.first.gateway.domain.entity.UserProfile;
 import com.first.gateway.infra.ai.AiServiceClient;
+import com.first.gateway.infra.ai.dto.ChatMessage;
+import com.first.gateway.infra.ai.dto.ChatRequest;
+import com.first.gateway.infra.ai.dto.EmbedRequest;
+import com.first.gateway.infra.ai.dto.EmbedResponse;
+import com.first.gateway.infra.ai.dto.MemoryContext;
+import com.first.gateway.infra.ai.dto.ModelParams;
+import com.first.gateway.infra.ai.dto.UpstreamConfig;
+import com.first.gateway.infra.ai.dto.UserProfileContext;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
@@ -284,16 +292,28 @@ public class RelayServiceImpl implements RelayService {
                     Map<String, Object> upstreamRequest = buildUpstreamRequest(request, selection.model());
                     Map<String, Object> response;
                     if (aiServiceProperties.isEnabled() && aiServiceClient.isHealthy()) {
-                        Map<String, Object> pythonRequest = new LinkedHashMap<>();
-                        pythonRequest.put("input", upstreamRequest.get("input"));
-                        pythonRequest.put("model", upstreamRequest.getOrDefault("model", aiServiceProperties.getEmbeddingModel()));
-                        Map<String, Object> upstream = new LinkedHashMap<>();
-                        upstream.put("base_url", selection.channel().getBaseUrl());
-                        upstream.put("api_key", channelKeyCrypto.decrypt(selection.channel().getApiKeyEncrypted()));
-                        upstream.put("model", selection.model().getModelName());
-                        pythonRequest.put("upstream", upstream);
-                        response = aiServiceClient.embed(pythonRequest)
+                        EmbedRequest embedRequest = new EmbedRequest(
+                            upstreamRequest.get("input"),
+                            (String) upstreamRequest.getOrDefault("model", aiServiceProperties.getEmbeddingModel()),
+                            new UpstreamConfig(
+                                selection.channel().getBaseUrl(),
+                                channelKeyCrypto.decrypt(selection.channel().getApiKeyEncrypted()),
+                                selection.model().getModelName()));
+                        EmbedResponse embResp = aiServiceClient.embed(embedRequest)
                             .orElseThrow(() -> new GatewayException(GatewayError.UPSTREAM_ERROR, "ai service embed failed"));
+                        response = new LinkedHashMap<>();
+                        response.put("object", "list");
+                        response.put("model", embResp.model());
+                        response.put("data", embResp.embeddings().stream()
+                            .map(emb -> {
+                                Map<String, Object> item = new LinkedHashMap<>();
+                                item.put("object", "embedding");
+                                item.put("embedding", emb);
+                                item.put("index", 0);
+                                return (Object) item;
+                            })
+                            .toList());
+                        response.put("usage", Map.of("prompt_tokens", 0, "total_tokens", 0));
                     } else {
                         response = openAiAdapter.embed(selection.channel(), upstreamRequest);
                     }
@@ -316,7 +336,7 @@ public class RelayServiceImpl implements RelayService {
         if (!aiServiceProperties.isChat() || !aiServiceClient.isHealthy()) {
             return Optional.empty();
         }
-        Map<String, Object> body = buildPythonChatBody(userId, selection, upstreamRequest, stream);
+        ChatRequest body = buildPythonChatBody(userId, selection, upstreamRequest, stream);
         Optional<Map<String, Object>> response = aiServiceClient.chat(body);
         if (response.isPresent()) {
             log.debug("Chat via first-ai-service for user {}", userId);
@@ -329,7 +349,7 @@ public class RelayServiceImpl implements RelayService {
         if (!aiServiceProperties.isChat() || !aiServiceClient.isHealthy()) {
             return false;
         }
-        Map<String, Object> body = buildPythonChatBody(userId, selection, upstreamRequest, true);
+        ChatRequest body = buildPythonChatBody(userId, selection, upstreamRequest, true);
         boolean ok = aiServiceClient.chatStream(body, chunk -> consumer.accept(chunk));
         if (ok) {
             log.debug("Chat stream via first-ai-service for user {}", userId);
@@ -338,56 +358,69 @@ public class RelayServiceImpl implements RelayService {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> buildPythonChatBody(Long userId, ChannelSelection selection,
-                                                      Map<String, Object> upstreamRequest, boolean stream) {
+    private ChatRequest buildPythonChatBody(Long userId, ChannelSelection selection,
+                                              Map<String, Object> upstreamRequest, boolean stream) {
         Channel channel = selection.channel();
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", selection.model().getModelName());
-        body.put("messages", upstreamRequest.get("messages"));
-        body.put("stream", stream);
 
-        Map<String, Object> modelParams = new LinkedHashMap<>();
+        ModelParams modelParams;
+        double temperature = DEFAULT_TEMPERATURE;
+        int maxTokens = DEFAULT_MAX_TOKENS;
         if (upstreamRequest.get("temperature") instanceof Number t) {
-            modelParams.put("temperature", t.doubleValue());
-        } else {
-            modelParams.put("temperature", DEFAULT_TEMPERATURE);
+            temperature = t.doubleValue();
         }
         if (upstreamRequest.get("max_tokens") instanceof Number m) {
-            modelParams.put("max_tokens", m.intValue());
-        } else {
-            modelParams.put("max_tokens", DEFAULT_MAX_TOKENS);
+            maxTokens = m.intValue();
         }
-        body.put("model_params", modelParams);
+        modelParams = new ModelParams(temperature, maxTokens);
 
-        if (upstreamRequest.get("tools") instanceof List<?> tools) {
-            body.put("tools", tools);
+        List<ChatMessage> chatMessages = new ArrayList<>();
+        if (upstreamRequest.get("messages") instanceof List<?> msgs) {
+            for (Object msg : msgs) {
+                if (msg instanceof Map<?, ?> m) {
+                    chatMessages.add(new ChatMessage(
+                        String.valueOf(m.getOrDefault("role", "user")),
+                        String.valueOf(m.getOrDefault("content", ""))));
+                }
+            }
         }
 
-        userProfileRepository.findByUserId(userId).ifPresent(profile -> {
-            Map<String, Object> profileCtx = new LinkedHashMap<>();
-            profileCtx.put("ai_system_prompt", profile.getAiSystemPrompt());
-            profileCtx.put("ai_tags", parseTags(profile.getAiTags()));
-            body.put("user_profile", profileCtx);
-        });
+        List<Map<String, Object>> tools = null;
+        if (upstreamRequest.get("tools") instanceof List<?> t) {
+            tools = (List<Map<String, Object>>) t;
+        }
+
+        UserProfileContext profileCtx = null;
+        var profileOpt = userProfileRepository.findByUserId(userId);
+        if (profileOpt.isPresent()) {
+            var profile = profileOpt.get();
+            profileCtx = new UserProfileContext(profile.getAiSystemPrompt(), parseTags(profile.getAiTags()));
+        }
 
         List<UserMemory> memories = userMemoryService.listForUser(userId, null);
-        List<Map<String, Object>> memRows = new ArrayList<>();
+        List<MemoryContext> memCtxs = new ArrayList<>();
         int limit = Math.min(memories.size(), MAX_USER_MEMORIES_IN_CHAT);
         for (int i = 0; i < limit; i++) {
             UserMemory m = memories.get(i);
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("category", m.getCategory());
-            row.put("content", m.getContent());
-            memRows.add(row);
+            memCtxs.add(new MemoryContext(
+                m.getCategory() != null ? m.getCategory().name() : "",
+                m.getContent()));
         }
-        body.put("user_memories", memRows);
 
-        Map<String, Object> upstream = new LinkedHashMap<>();
-        upstream.put("base_url", channel.getBaseUrl());
-        upstream.put("api_key", channelKeyCrypto.decrypt(channel.getApiKeyEncrypted()));
-        upstream.put("model", selection.model().getModelName());
-        body.put("upstream", upstream);
-        return body;
+        UpstreamConfig upstream = new UpstreamConfig(
+            channel.getBaseUrl(),
+            channelKeyCrypto.decrypt(channel.getApiKeyEncrypted()),
+            selection.model().getModelName());
+
+        return new ChatRequest(
+            selection.model().getModelName(),
+            chatMessages,
+            stream,
+            modelParams,
+            profileCtx,
+            memCtxs,
+            null,
+            tools,
+            upstream);
     }
 
     private List<String> parseTags(String aiTags) {

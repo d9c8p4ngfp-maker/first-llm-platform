@@ -1,8 +1,7 @@
 package com.first.gateway.infra.ai;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.first.gateway.config.AiServiceProperties;
+import com.first.gateway.infra.ai.dto.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -16,8 +15,6 @@ import reactor.core.publisher.Flux;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,13 +31,11 @@ public class AiServiceClient {
 
     private final AiServiceProperties properties;
     private final WebClient webClient;
-    private final ObjectMapper objectMapper;
     private final AtomicBoolean healthyCache = new AtomicBoolean(false);
 
-    public AiServiceClient(AiServiceProperties properties, WebClient aiServiceWebClient, ObjectMapper objectMapper) {
+    public AiServiceClient(AiServiceProperties properties, WebClient aiServiceWebClient) {
         this.properties = properties;
         this.webClient = aiServiceWebClient;
-        this.objectMapper = objectMapper;
     }
 
     @PostConstruct
@@ -120,7 +115,7 @@ public class AiServiceClient {
         healthyCache.set(result);
     }
 
-    public Optional<Map<String, Object>> chat(Map<String, Object> request) {
+    public Optional<Map<String, Object>> chat(ChatRequest request) {
         if (!isChatEnabled()) {
             return Optional.empty();
         }
@@ -140,7 +135,7 @@ public class AiServiceClient {
         }
     }
 
-    public boolean chatStream(Map<String, Object> request, Consumer<String> chunkConsumer) {
+    public boolean chatStream(ChatRequest request, Consumer<String> chunkConsumer) {
         if (!isChatEnabled()) {
             return false;
         }
@@ -170,46 +165,38 @@ public class AiServiceClient {
         }
     }
 
-    public Optional<List<Map<String, Object>>> extractMemories(Map<String, Object> request) {
+    public Optional<MemoryExtractResponse> extractMemories(MemoryExtractRequest request) {
         if (!isMemoryExtractionEnabled()) {
             return Optional.empty();
         }
         try {
-            Map<String, Object> body = webClient.post()
+            MemoryExtractResponse body = webClient.post()
                 .uri("/ai/memory/extract")
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .retrieve()
-                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
+                .bodyToMono(MemoryExtractResponse.class)
                 .block(Duration.ofMillis(properties.getReadTimeoutMs()));
-            if (body == null) {
-                return Optional.of(Collections.emptyList());
-            }
-            Object memoriesObj = body.get("memories");
-            if (!(memoriesObj instanceof List<?> list)) {
-                return Optional.of(Collections.emptyList());
-            }
-            List<Map<String, Object>> memories = objectMapper.convertValue(list, new TypeReference<>() {});
-            return Optional.of(memories);
+            return Optional.ofNullable(body);
         } catch (Exception ex) {
             log.warn("AI memory extraction call failed: {}", ex.getMessage());
             return Optional.empty();
         }
     }
 
-    public Optional<Map<String, Object>> synthesizeProfile(Map<String, Object> request) {
+    public Optional<ProfileSynthesizeResponse> synthesizeProfile(ProfileSynthesizeRequest request) {
         if (!isProfileSynthesisEnabled()) {
             return Optional.empty();
         }
         try {
-            Map<String, Object> body = webClient.post()
+            ProfileSynthesizeResponse body = webClient.post()
                 .uri("/ai/profile/synthesize")
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .retrieve()
-                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
+                .bodyToMono(ProfileSynthesizeResponse.class)
                 .block(Duration.ofMillis(properties.getReadTimeoutMs()));
             return Optional.ofNullable(body);
         } catch (Exception ex) {
@@ -218,46 +205,38 @@ public class AiServiceClient {
         }
     }
 
-    public Optional<List<Map<String, Object>>> queryRag(Map<String, Object> request) {
+    public Optional<RagQueryResponse> queryRag(RagQueryRequest request) {
         if (!isRagEnabled()) {
             return Optional.empty();
         }
         try {
-            Map<String, Object> body = webClient.post()
+            RagQueryResponse body = webClient.post()
                 .uri("/ai/rag/query")
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .retrieve()
-                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
+                .bodyToMono(RagQueryResponse.class)
                 .block(Duration.ofMillis(properties.getReadTimeoutMs()));
-            if (body == null) {
-                return Optional.of(Collections.emptyList());
-            }
-            Object chunksObj = body.get("chunks");
-            if (!(chunksObj instanceof List<?>)) {
-                return Optional.of(Collections.emptyList());
-            }
-            List<Map<String, Object>> chunks = objectMapper.convertValue(chunksObj, new TypeReference<>() {});
-            return Optional.of(chunks);
+            return Optional.ofNullable(body);
         } catch (Exception ex) {
             log.warn("AI RAG query failed: {}", ex.getMessage());
             return Optional.empty();
         }
     }
 
-    public Optional<Map<String, Object>> embed(Map<String, Object> request) {
+    public Optional<EmbedResponse> embed(EmbedRequest request) {
         if (!isEnabled()) {
             return Optional.empty();
         }
         try {
-            Map<String, Object> body = webClient.post()
+            EmbedResponse body = webClient.post()
                 .uri("/ai/rag/embed")
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .retrieve()
-                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
+                .bodyToMono(EmbedResponse.class)
                 .block(Duration.ofMillis(properties.getReadTimeoutMs()));
             return Optional.ofNullable(body);
         } catch (Exception ex) {
@@ -266,22 +245,42 @@ public class AiServiceClient {
         }
     }
 
-    public Optional<Map<String, Object>> indexRag(Map<String, Object> request) {
+    public Optional<RagIndexResponse> indexRag(RagIndexRequest request) {
         if (!isRagEnabled()) {
             return Optional.empty();
         }
         try {
-            Map<String, Object> body = webClient.post()
+            RagIndexResponse body = webClient.post()
                 .uri("/ai/rag/index")
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .retrieve()
-                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
+                .bodyToMono(RagIndexResponse.class)
                 .block(Duration.ofMillis(properties.getReadTimeoutMs()));
             return Optional.ofNullable(body);
         } catch (Exception ex) {
             log.warn("AI RAG index failed: {}", ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    public Optional<CrawlAndIndexResponse> crawlAndIndex(CrawlAndIndexRequest request) {
+        if (!isEnabled()) {
+            return Optional.empty();
+        }
+        try {
+            CrawlAndIndexResponse body = webClient.post()
+                .uri("/ai/rag/crawl")
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono(CrawlAndIndexResponse.class)
+                .block(Duration.ofMillis(properties.getReadTimeoutMs()));
+            return Optional.ofNullable(body);
+        } catch (Exception ex) {
+            log.warn("AI crawl-and-index failed: {}", ex.getMessage());
             return Optional.empty();
         }
     }

@@ -1,6 +1,5 @@
 package com.first.gateway.service.profile;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.first.gateway.config.AiServiceProperties;
 import com.first.gateway.domain.entity.Channel;
@@ -9,6 +8,14 @@ import com.first.gateway.domain.entity.UserMemory;
 import com.first.gateway.domain.entity.UserProfile;
 import com.first.gateway.domain.enums.SynthesisStatus;
 import com.first.gateway.infra.ai.AiServiceClient;
+import com.first.gateway.infra.ai.dto.AiPersonality;
+import com.first.gateway.infra.ai.dto.CurrentProfile;
+import com.first.gateway.infra.ai.dto.MemoryItem;
+import com.first.gateway.infra.ai.dto.ModelParams;
+import com.first.gateway.infra.ai.dto.ProfileSynthesizeRequest;
+import com.first.gateway.infra.ai.dto.ProfileSynthesizeResponse;
+import com.first.gateway.infra.ai.dto.SynthesisConfig;
+import com.first.gateway.infra.ai.dto.UpstreamConfig;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.relay.router.ChannelSelector;
 import com.first.gateway.repository.UserProfileRepository;
@@ -20,9 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -116,7 +121,7 @@ public class ProfileSynthesisService {
 
     private boolean applySynthesis(Long userId, UserProfile profile, List<UserMemory> memories, PipelineConfig config) {
         if (aiServiceProperties.isProfileSynthesis() && aiServiceClient.isHealthy()) {
-            Optional<Map<String, Object>> result = callPythonSynthesis(userId, profile, memories, config);
+            Optional<ProfileSynthesizeResponse> result = callPythonSynthesis(userId, profile, memories, config);
             if (result.isPresent()) {
                 applyProfileResult(profile, result.get());
                 log.info("Profile synthesis via first-ai-service for user {}", userId);
@@ -128,103 +133,76 @@ public class ProfileSynthesisService {
         return false;
     }
 
-    private Optional<Map<String, Object>> callPythonSynthesis(Long userId, UserProfile profile,
-                                                               List<UserMemory> memories, PipelineConfig config) {
+    private Optional<ProfileSynthesizeResponse> callPythonSynthesis(Long userId, UserProfile profile,
+                                                                       List<UserMemory> memories, PipelineConfig config) {
         try {
             String model = config != null && config.getModelId() != null && !config.getModelId().isBlank()
                 ? config.getModelId() : "deepseek-chat";
             Channel channel = channelSelector.selectForModel(model, userId);
 
-            List<Map<String, Object>> memRows = new ArrayList<>();
+            List<MemoryItem> memItems = new ArrayList<>();
             for (UserMemory m : memories) {
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("category", m.getCategory());
-                row.put("content", m.getContent());
-                row.put("importance", m.getImportance() != null ? m.getImportance() : 3);
-                memRows.add(row);
+                memItems.add(new MemoryItem(
+                    m.getCategory() != null ? m.getCategory().name() : "",
+                    m.getContent(),
+                    m.getImportance() != null ? m.getImportance().intValue() : 3));
             }
 
-            Map<String, Object> current = new LinkedHashMap<>();
-            current.put("ai_summary", profile.getAiSummary());
-            current.put("ai_tags", parseTags(profile.getAiTags()));
-            Map<String, Object> personality = new LinkedHashMap<>();
-            if (profile.getMbti() != null) personality.put("mbti", profile.getMbti());
-            if (profile.getMbtiLabel() != null) personality.put("mbti_label", profile.getMbtiLabel());
-            if (profile.getZodiac() != null) personality.put("zodiac", profile.getZodiac());
-            current.put("ai_personality", personality);
+            AiPersonality personality = new AiPersonality(
+                profile.getMbti(), profile.getMbtiLabel(), profile.getZodiac());
 
-            Map<String, Object> cfg = new LinkedHashMap<>();
-            cfg.put("model", model);
-            if (config != null && config.getModelParams() != null) {
-                cfg.put("model_params", parseModelParams(config.getModelParams()));
-            }
-            if (config != null && config.getPromptText() != null) {
-                cfg.put("prompt_override", config.getPromptText());
-            }
+            CurrentProfile current = new CurrentProfile(
+                profile.getAiSummary(),
+                profile.getAiTags(),
+                personality);
 
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("memories", memRows);
-            body.put("current_profile", current);
-            body.put("config", cfg);
+            SynthesisConfig synthCfg = new SynthesisConfig(
+                model,
+                config != null ? parseModelParams(config.getModelParams()) : new ModelParams(0.3, 3000),
+                config != null ? config.getPromptText() : null);
 
-            Map<String, Object> upstream = new LinkedHashMap<>();
-            upstream.put("base_url", channel.getBaseUrl());
-            upstream.put("api_key", channelKeyCrypto.decrypt(channel.getApiKeyEncrypted()));
-            upstream.put("model", model);
-            body.put("upstream", upstream);
+            UpstreamConfig upstream = new UpstreamConfig(
+                channel.getBaseUrl(),
+                channelKeyCrypto.decrypt(channel.getApiKeyEncrypted()),
+                model);
 
-            return aiServiceClient.synthesizeProfile(body);
+            ProfileSynthesizeRequest req = new ProfileSynthesizeRequest(
+                memItems, current, synthCfg, upstream);
+
+            return aiServiceClient.synthesizeProfile(req);
         } catch (Exception e) {
             log.warn("callPythonSynthesis failed: {}", e.getMessage());
             return Optional.empty();
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private void applyProfileResult(UserProfile profile, Map<String, Object> response) {
-        Object profileObj = response.get("profile");
-        if (!(profileObj instanceof Map<?, ?> map)) {
+    private void applyProfileResult(UserProfile profile, ProfileSynthesizeResponse response) {
+        if (response.profile() == null) {
             return;
         }
-        Map<String, Object> p = objectMapper.convertValue(map, new TypeReference<>() {});
-        if (p.get("ai_summary") != null) {
-            profile.setAiSummary(p.get("ai_summary").toString());
+        var pr = response.profile();
+        if (pr.aiSummary() != null) {
+            profile.setAiSummary(pr.aiSummary());
         }
-        if (p.get("ai_system_prompt") != null) {
-            profile.setAiSystemPrompt(p.get("ai_system_prompt").toString());
+        if (pr.aiSystemPrompt() != null) {
+            profile.setAiSystemPrompt(pr.aiSystemPrompt());
         }
-        if (p.get("ai_tags") instanceof List<?> tags) {
-            try {
-                profile.setAiTags(objectMapper.writeValueAsString(tags));
-            } catch (Exception ignored) {
-            }
+        if (pr.aiTags() != null) {
+            profile.setAiTags(pr.aiTags());
         }
-        if (p.get("ai_personality") instanceof Map<?, ?> pers) {
-            Object mbti = pers.get("mbti");
-            if (mbti != null) profile.setMbti(mbti.toString());
-            Object label = pers.get("mbti_label");
-            if (label != null) profile.setMbtiLabel(label.toString());
-            Object zodiac = pers.get("zodiac");
-            if (zodiac != null) profile.setZodiac(zodiac.toString());
+        if (pr.aiPersonality() != null) {
+            var pers = pr.aiPersonality();
+            if (pers.mbti() != null) profile.setMbti(pers.mbti());
+            if (pers.mbtiLabel() != null) profile.setMbtiLabel(pers.mbtiLabel());
+            if (pers.zodiac() != null) profile.setZodiac(pers.zodiac());
         }
     }
 
-    private List<String> parseTags(String aiTags) {
-        if (aiTags == null || aiTags.isBlank()) {
-            return List.of();
-        }
+    private ModelParams parseModelParams(String json) {
         try {
-            return objectMapper.readValue(aiTags, new TypeReference<>() {});
+            return objectMapper.readValue(json, ModelParams.class);
         } catch (Exception e) {
-            return List.of(aiTags.trim());
-        }
-    }
-
-    private Map<String, Object> parseModelParams(String json) {
-        try {
-            return objectMapper.readValue(json, new TypeReference<>() {});
-        } catch (Exception e) {
-            return Map.of("temperature", 0.3, "max_tokens", 3000);
+            return new ModelParams(0.3, 3000);
         }
     }
 }
