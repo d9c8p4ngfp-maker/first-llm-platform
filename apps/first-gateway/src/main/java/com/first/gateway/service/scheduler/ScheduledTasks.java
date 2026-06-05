@@ -1,6 +1,8 @@
 package com.first.gateway.service.scheduler;
 
 import com.first.gateway.domain.entity.UserMemory;
+import com.first.gateway.domain.enums.MemoryCategory;
+import com.first.gateway.domain.enums.MemoryStatus;
 import com.first.gateway.repository.UserMemoryRepository;
 import com.first.gateway.service.notification.NotificationService;
 import org.slf4j.Logger;
@@ -37,7 +39,8 @@ public class ScheduledTasks {
         String nowTime = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
         String futureTime = LocalTime.now().plusMinutes(15).format(DateTimeFormatter.ofPattern("HH:mm"));
 
-        List<UserMemory> upcoming = memoryRepository.findUpcomingSchedules(today, nowTime, futureTime);
+        List<UserMemory> upcoming = memoryRepository.findUpcomingSchedules(today, nowTime, futureTime,
+            MemoryCategory.SCHEDULE, MemoryStatus.ACTIVE);
         for (UserMemory m : upcoming) {
             if (m.getReminded() != null && m.getReminded() == 1) continue;
             m.setReminded((short) 1);
@@ -52,7 +55,8 @@ public class ScheduledTasks {
     @Transactional
     public void archiveExpiredSchedules() {
         LocalDate today = LocalDate.now();
-        int archived = memoryRepository.archiveExpiredSchedules(today);
+        int archived = memoryRepository.archiveExpiredSchedules(today,
+            MemoryStatus.ARCHIVED, MemoryCategory.SCHEDULE, MemoryStatus.ACTIVE);
         if (archived > 0) {
             log.info("Archived {} expired schedules", archived);
         }
@@ -62,7 +66,8 @@ public class ScheduledTasks {
     @Transactional
     public void cleanupOldData() {
         Instant cutoff = Instant.now().minus(Duration.ofDays(90));
-        int deleted = memoryRepository.cleanupOldData(cutoff);
+        int deleted = memoryRepository.cleanupOldData(cutoff,
+            List.of(MemoryStatus.DELETED, MemoryStatus.ARCHIVED));
         if (deleted > 0) {
             log.info("Cleaned up {} old memory records", deleted);
         }

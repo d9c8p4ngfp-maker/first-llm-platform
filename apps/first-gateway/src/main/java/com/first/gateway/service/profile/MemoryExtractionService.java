@@ -6,6 +6,8 @@ import com.first.gateway.config.AiServiceProperties;
 import com.first.gateway.domain.entity.PipelineConfig;
 import com.first.gateway.domain.entity.UserMemory;
 import com.first.gateway.domain.entity.Channel;
+import com.first.gateway.domain.enums.MemoryCategory;
+import com.first.gateway.domain.enums.MemoryStatus;
 import com.first.gateway.infra.ai.AiServiceClient;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.relay.router.ChannelSelector;
@@ -100,13 +102,20 @@ public class MemoryExtractionService {
             int skippedDuplicate = 0;
             for (Map<String, Object> item : items) {
                 try {
-                    String category = (String) item.getOrDefault("category", "FACT");
+                    String categoryStr = (String) item.getOrDefault("category", "FACT");
                     String content = (String) item.get("content");
                     if (content == null || content.isBlank()) continue;
 
                     if (isDuplicate(content, existing)) {
                         skippedDuplicate++;
                         continue;
+                    }
+
+                    MemoryCategory category;
+                    try {
+                        category = MemoryCategory.valueOf(categoryStr.toUpperCase());
+                    } catch (IllegalArgumentException e) {
+                        category = MemoryCategory.FACT;
                     }
 
                     UserMemory memory = new UserMemory();
@@ -130,7 +139,7 @@ public class MemoryExtractionService {
                     if (numVal instanceof Number) {
                         memory.setNumericValue(BigDecimal.valueOf(((Number) numVal).doubleValue()));
                     }
-                    memory.setStatus("ACTIVE");
+                    memory.setStatus(MemoryStatus.ACTIVE);
                     memoryService.createFromExtraction(memory);
                     created++;
                 } catch (RuntimeException e) {

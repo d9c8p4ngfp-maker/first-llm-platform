@@ -1,6 +1,8 @@
 package com.first.gateway.service.profile;
 
 import com.first.gateway.domain.entity.UserMemory;
+import com.first.gateway.domain.enums.MemoryCategory;
+import com.first.gateway.domain.enums.MemoryStatus;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
 import com.first.gateway.repository.UserMemoryRepository;
@@ -27,31 +29,35 @@ public class UserMemoryService {
     }
 
     public List<UserMemory> list(Long userId, String category, String status) {
-        String effectiveStatus = status != null && !status.isBlank() ? status : "ACTIVE";
+        MemoryStatus effectiveStatus = status != null && !status.isBlank()
+            ? MemoryStatus.valueOf(status.toUpperCase())
+            : MemoryStatus.ACTIVE;
         if (category != null && !category.isBlank()) {
+            MemoryCategory cat = MemoryCategory.valueOf(category.toUpperCase());
             return memoryRepository.findByUserIdAndCategoryAndStatusOrderByUpdatedAtDesc(
-                userId, category, effectiveStatus);
+                userId, cat, effectiveStatus);
         }
         return memoryRepository.findByUserIdAndStatusOrderByUpdatedAtDesc(userId, effectiveStatus);
     }
 
     public List<Map<String, Object>> todaySchedule(Long userId) {
         LocalDate today = LocalDate.now();
-        return memoryRepository.findByUserIdAndScheduleDateAndStatus(userId, today, "ACTIVE").stream()
-            .filter(m -> "SCHEDULE".equals(m.getCategory()) || "TODO".equals(m.getCategory()))
+        return memoryRepository.findByUserIdAndScheduleDateAndStatus(userId, today, MemoryStatus.ACTIVE).stream()
+            .filter(m -> MemoryCategory.SCHEDULE.equals(m.getCategory()) || MemoryCategory.TODO.equals(m.getCategory()))
             .map(this::toScheduleEntry)
             .toList();
     }
 
     public List<Map<String, Object>> upcomingSchedule(Long userId) {
         LocalDate today = LocalDate.now();
-        List<UserMemory> rows = memoryRepository.findUpcomingSchedulesByUser(userId, today);
+        List<UserMemory> rows = memoryRepository.findUpcomingSchedulesByUser(userId, today,
+            MemoryStatus.ACTIVE, List.of(MemoryCategory.SCHEDULE, MemoryCategory.TODO));
         if (rows.isEmpty()) {
             rows = memoryRepository.findByUserIdAndCategoryAndStatusOrderByUpdatedAtDesc(
-                userId, "SCHEDULE", "ACTIVE");
+                userId, MemoryCategory.SCHEDULE, MemoryStatus.ACTIVE);
             if (rows.isEmpty()) {
                 rows = memoryRepository.findByUserIdAndCategoryAndStatusOrderByUpdatedAtDesc(
-                    userId, "TODO", "ACTIVE");
+                    userId, MemoryCategory.TODO, MemoryStatus.ACTIVE);
             }
         }
         return rows.stream()
@@ -81,7 +87,7 @@ public class UserMemoryService {
         memory.setScheduleDate(scheduleDate);
         memory.setScheduleTime(scheduleTime);
         memory.setNumericValue(numericValue);
-        memory.setStatus("ACTIVE");
+        memory.setStatus(MemoryStatus.ACTIVE);
         UserMemory saved = memoryRepository.save(memory);
         syncMemoryCount(userId);
         return saved;
@@ -119,7 +125,7 @@ public class UserMemoryService {
     @Transactional
     public UserMemory markDone(Long id, Long userId) {
         UserMemory memory = require(id, userId);
-        memory.setStatus("DONE");
+        memory.setStatus(MemoryStatus.DONE);
         UserMemory saved = memoryRepository.save(memory);
         syncMemoryCount(userId);
         return saved;
@@ -128,7 +134,7 @@ public class UserMemoryService {
     @Transactional
     public UserMemory archive(Long id, Long userId) {
         UserMemory memory = require(id, userId);
-        memory.setStatus("ARCHIVED");
+        memory.setStatus(MemoryStatus.ARCHIVED);
         UserMemory saved = memoryRepository.save(memory);
         syncMemoryCount(userId);
         return saved;
@@ -144,7 +150,7 @@ public class UserMemoryService {
 
     private void syncMemoryCount(Long userId) {
         profileRepository.findByUserId(userId).ifPresent(profile -> {
-            int count = (int) memoryRepository.countByUserIdAndStatus(userId, "ACTIVE");
+            int count = (int) memoryRepository.countByUserIdAndStatus(userId, MemoryStatus.ACTIVE);
             profile.setMemoryCount(count);
             profileRepository.save(profile);
         });
@@ -161,18 +167,24 @@ public class UserMemoryService {
         return entry;
     }
 
-    private static String requireCategory(String category) {
+    private static MemoryCategory requireCategory(String category) {
         if (category == null || category.isBlank()) {
             throw new GatewayException(GatewayError.INVALID_REQUEST, "category is required");
         }
-        return category.trim().toUpperCase();
+        try {
+            return MemoryCategory.valueOf(category.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new GatewayException(GatewayError.INVALID_REQUEST, "invalid category: " + category);
+        }
     }
 
     public List<UserMemory> listForUser(Long userId, String category) {
+        MemoryStatus activeStatus = MemoryStatus.ACTIVE;
         if (category != null && !category.isBlank()) {
-            return memoryRepository.findByUserIdAndCategoryAndStatusOrderByCreatedAtDesc(userId, category, "ACTIVE");
+            MemoryCategory cat = MemoryCategory.valueOf(category.toUpperCase());
+            return memoryRepository.findByUserIdAndCategoryAndStatusOrderByCreatedAtDesc(userId, cat, activeStatus);
         }
-        return memoryRepository.findByUserIdAndStatusOrderByCreatedAtDesc(userId, "ACTIVE");
+        return memoryRepository.findByUserIdAndStatusOrderByCreatedAtDesc(userId, activeStatus);
     }
 
     @Transactional
@@ -181,11 +193,11 @@ public class UserMemoryService {
     }
 
     public long countForUser(Long userId) {
-        return memoryRepository.countByUserIdAndStatus(userId, "ACTIVE");
+        return memoryRepository.countByUserIdAndStatus(userId, MemoryStatus.ACTIVE);
     }
 
     public List<UserMemory> recentEvents(Long userId, int limit) {
-        return memoryRepository.findByUserIdAndCategoryAndStatusOrderByCreatedAtDesc(userId, "EVENT", "ACTIVE")
+        return memoryRepository.findByUserIdAndCategoryAndStatusOrderByCreatedAtDesc(userId, MemoryCategory.EVENT, MemoryStatus.ACTIVE)
             .stream().limit(limit).toList();
     }
 
