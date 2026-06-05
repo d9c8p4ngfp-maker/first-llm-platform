@@ -35,6 +35,15 @@ public class KnowledgeDocument {
     @Column(name = "source_url", length = 2000)
     private String sourceUrl;
 
+    @Column(name = "crawled_at")
+    private Instant crawledAt;
+
+    @Column(name = "word_count")
+    private int wordCount = 0;
+
+    @Column(name = "auto_summary", columnDefinition = "TEXT")
+    private String autoSummary;
+
     @Column(name = "file_path", length = 500)
     private String filePath;
 

@@ -11,4 +11,8 @@ public interface KnowledgeBaseRepository extends JpaRepository<KnowledgeBase, Lo
     List<KnowledgeBase> findByTenantIdAndDeletedOrderByUpdatedAtDesc(Long tenantId, Short deleted);
 
     Optional<KnowledgeBase> findByIdAndTenantIdAndDeleted(Long id, Long tenantId, Short deleted);
+
+    List<KnowledgeBase> findByTenantIdAndVisibilityAndDeletedAndStatus(Long tenantId, String visibility, Short deleted, String status);
+
+    List<KnowledgeBase> findByVisibilityAndDeletedAndStatus(String visibility, Short deleted, String status);
 }

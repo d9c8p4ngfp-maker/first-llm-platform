@@ -9,7 +9,9 @@ import com.first.gateway.domain.entity.KnowledgeDocument;
 import com.first.gateway.domain.enums.SourceType;
 import com.first.gateway.domain.enums.SyncStatus;
 import com.first.gateway.infra.ai.AiServiceClient;
+import com.first.gateway.infra.ai.dto.RagChunkResult;
 import com.first.gateway.infra.ai.dto.RagQueryRequest;
+import com.first.gateway.infra.ai.dto.RagQueryResponse;
 import com.first.gateway.infra.ai.dto.UpstreamConfig;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
@@ -24,10 +26,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -98,6 +103,17 @@ public class KnowledgeBaseService {
     }
 
     @Transactional
+    public KnowledgeBase createPublicKnowledgeBase(String name, String description) {
+        KnowledgeBase kb = new KnowledgeBase();
+        kb.setTenantId(0L);
+        kb.setVisibility("PUBLIC");
+        kb.setName(name);
+        kb.setDescription(description);
+        kb.setStatus("ACTIVE");
+        return knowledgeBaseRepository.save(kb);
+    }
+
+    @Transactional
     public KnowledgeBase update(Long id, Long tenantId, String name, String description) {
         KnowledgeBase kb = requireByTenant(id, tenantId);
         if (name != null && !name.isBlank()) {
@@ -160,6 +176,33 @@ public class KnowledgeBaseService {
         task.setRefExtra(kbId);
         asyncTaskRepository.save(task);
 
+        return doc;
+    }
+
+    @Transactional
+    public KnowledgeDocument importFromUrl(Long kbId, Long tenantId, Long userId, String url, String title) {
+        KnowledgeBase kb = knowledgeBaseRepository.findById(kbId)
+            .orElseThrow(() -> new GatewayException(GatewayError.INVALID_REQUEST, "knowledge base not found"));
+        if ("PUBLIC".equals(kb.getVisibility())) {
+            // Public KB — permission checked by Controller
+        } else if (!kb.getTenantId().equals(tenantId)) {
+            throw new GatewayException(GatewayError.ACCESS_DENIED);
+        }
+
+        KnowledgeDocument doc = new KnowledgeDocument();
+        doc.setKnowledgeBaseId(kbId);
+        doc.setTenantId(tenantId);
+        doc.setTitle(title != null ? title : url);
+        doc.setSourceUrl(url);
+        doc.setSourceType(SourceType.URL);
+        doc.setSyncStatus(SyncStatus.PENDING);
+        doc = knowledgeDocumentRepository.save(doc);
+
+        AsyncTask task = new AsyncTask();
+        task.setTaskType("DOC_INDEX");
+        task.setRefId(doc.getId());
+        task.setRefExtra(kbId);
+        asyncTaskRepository.save(task);
         return doc;
     }
 
@@ -237,6 +280,54 @@ public class KnowledgeBaseService {
             .sorted(Comparator.comparingLong(m -> -(long) m.get("score")))
             .limit(topK)
             .toList();
+    }
+
+    private static final double MIN_CONFIDENCE_SCORE = 0.65;
+
+    public Optional<RagQueryResponse> searchAll(Long tenantId, String query, int topK) {
+        UpstreamConfig upstream = getEmbeddingUpstream();
+
+        // Stage 1: search user's private KBs
+        List<Long> privateKbIds = knowledgeBaseRepository
+            .findByTenantIdAndVisibilityAndDeletedAndStatus(tenantId, "PRIVATE", (short) 0, "ACTIVE")
+            .stream().map(KnowledgeBase::getId).toList();
+
+        List<RagChunkResult> results = new ArrayList<>();
+        if (!privateKbIds.isEmpty()) {
+            var privateReq = new RagQueryRequest(query, privateKbIds, topK, upstream.model(), upstream);
+            aiServiceClient.queryRag(privateReq)
+                .ifPresent(resp -> results.addAll(resp.chunks()));
+        }
+
+        // Stage 2: supplement with public KB if private results insufficient
+        boolean needPublic = results.size() < topK
+            || results.stream().mapToDouble(RagChunkResult::score).max().orElse(0) < MIN_CONFIDENCE_SCORE;
+
+        if (needPublic) {
+            List<Long> publicKbIds = knowledgeBaseRepository
+                .findByVisibilityAndDeletedAndStatus("PUBLIC", (short) 0, "ACTIVE")
+                .stream().map(KnowledgeBase::getId).toList();
+            if (!publicKbIds.isEmpty()) {
+                int remaining = topK - results.size();
+                int publicTopK = Math.max(remaining, topK / 2);
+                var publicReq = new RagQueryRequest(query, publicKbIds, publicTopK, upstream.model(), upstream);
+                aiServiceClient.queryRag(publicReq)
+                    .ifPresent(resp -> results.addAll(resp.chunks()));
+            }
+        }
+
+        if (results.isEmpty()) return Optional.empty();
+
+        List<RagChunkResult> merged = results.stream()
+            .collect(Collectors.toMap(
+                c -> c.documentId() + ":" + c.content().hashCode(),
+                c -> c, (a, b) -> a.score() >= b.score() ? a : b))
+            .values().stream()
+            .sorted(Comparator.comparingDouble(RagChunkResult::score).reversed())
+            .limit(topK)
+            .toList();
+
+        return Optional.of(new RagQueryResponse(merged));
     }
 
     @Transactional

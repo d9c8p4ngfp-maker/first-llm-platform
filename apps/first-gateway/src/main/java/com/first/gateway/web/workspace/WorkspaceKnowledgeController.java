@@ -2,9 +2,11 @@ package com.first.gateway.web.workspace;
 
 import com.first.gateway.domain.entity.KnowledgeBase;
 import com.first.gateway.domain.entity.KnowledgeDocument;
+import com.first.gateway.repository.KnowledgeBaseRepository;
 import com.first.gateway.service.auth.admin.AdminPrincipal;
 import com.first.gateway.service.knowledge.FileStorageService;
 import com.first.gateway.service.knowledge.KnowledgeBaseService;
+import com.first.gateway.web.admin.support.AdminAccess;
 import com.first.gateway.web.workspace.dto.KnowledgeBaseRequest;
 import com.first.gateway.web.workspace.dto.KnowledgeDocumentRequest;
 import com.first.gateway.web.workspace.support.WorkspaceAccess;
@@ -22,11 +24,14 @@ public class WorkspaceKnowledgeController {
 
     private final KnowledgeBaseService knowledgeBaseService;
     private final FileStorageService fileStorageService;
+    private final KnowledgeBaseRepository knowledgeBaseRepository;
 
     public WorkspaceKnowledgeController(KnowledgeBaseService knowledgeBaseService,
-                                         FileStorageService fileStorageService) {
+                                         FileStorageService fileStorageService,
+                                         KnowledgeBaseRepository knowledgeBaseRepository) {
         this.knowledgeBaseService = knowledgeBaseService;
         this.fileStorageService = fileStorageService;
+        this.knowledgeBaseRepository = knowledgeBaseRepository;
     }
 
     @GetMapping
@@ -101,6 +106,28 @@ public class WorkspaceKnowledgeController {
         String query = body.get("query") != null ? body.get("query").toString() : "";
         int topK = body.get("top_k") instanceof Number n ? n.intValue() : 5;
         return knowledgeBaseService.search(id, principal.tenantId(), query, topK);
+    }
+
+    @PostMapping("/public")
+    public KnowledgeBase createPublicKb(@Valid @RequestBody KnowledgeBaseRequest body, HttpServletRequest request) {
+        AdminPrincipal principal = (AdminPrincipal) request.getAttribute("principal");
+        AdminAccess.requirePlatformAdmin(principal);
+        return knowledgeBaseService.createPublicKnowledgeBase(body.name(), body.description());
+    }
+
+    @GetMapping("/public")
+    public List<KnowledgeBase> listPublicKbs(HttpServletRequest request) {
+        AdminPrincipal principal = (AdminPrincipal) request.getAttribute("principal");
+        AdminAccess.requirePlatformAdmin(principal);
+        return knowledgeBaseRepository.findByVisibilityAndDeletedAndStatus("PUBLIC", (short) 0, "ACTIVE");
+    }
+
+    @PostMapping("/{id}/import-url")
+    public KnowledgeDocument importUrl(@PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
+        AdminPrincipal principal = (AdminPrincipal) request.getAttribute("principal");
+        String url = body.get("url");
+        String title = body.get("title");
+        return knowledgeBaseService.importFromUrl(id, principal.tenantId(), principal.userId(), url, title);
     }
 
     @PostMapping(value = "/{id}/documents/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
