@@ -391,7 +391,7 @@ public class KnowledgeBaseService {
         return doc;
     }
 
-    private UpstreamConfig getEmbeddingUpstream() {
+    public UpstreamConfig getEmbeddingUpstream() {
         List<ChannelModel> embeddingModels = channelModelRepository
             .findByModelTypeEnabled(ModelType.EMBEDDING);
         if (embeddingModels.isEmpty()) {

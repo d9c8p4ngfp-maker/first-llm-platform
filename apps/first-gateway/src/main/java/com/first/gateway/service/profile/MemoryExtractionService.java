@@ -10,6 +10,7 @@ import com.first.gateway.domain.enums.MemoryStatus;
 import com.first.gateway.infra.ai.AiServiceClient;
 import com.first.gateway.infra.ai.dto.ChatMessage;
 import com.first.gateway.infra.ai.dto.ExistingMemoryRef;
+import com.first.gateway.infra.ai.dto.ExtractedMemory;
 import com.first.gateway.infra.ai.dto.MemoryExtractRequest;
 import com.first.gateway.infra.ai.dto.MemoryExtractResponse;
 import com.first.gateway.infra.ai.dto.ModelConfig;
@@ -29,9 +30,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -96,7 +95,7 @@ public class MemoryExtractionService {
 
             String promptText = config.getPromptText();
 
-            List<Map<String, Object>> items = callExtraction(config, userId, existing, userMessage,
+            List<ExtractedMemory> items = callExtraction(config, userId, existing, userMessage,
                 assistantMessage, promptText);
 
             if (items == null || items.isEmpty()) {
@@ -106,10 +105,10 @@ public class MemoryExtractionService {
 
             int created = 0;
             int skippedDuplicate = 0;
-            for (Map<String, Object> item : items) {
+            for (ExtractedMemory item : items) {
                 try {
-                    String categoryStr = (String) item.getOrDefault("category", "FACT");
-                    String content = (String) item.get("content");
+                    String categoryStr = item.category() != null ? item.category() : "FACT";
+                    String content = item.content();
                     if (content == null || content.isBlank()) continue;
 
                     if (isDuplicate(content, existing)) {
@@ -131,20 +130,17 @@ public class MemoryExtractionService {
                     memory.setSource("AI_EXTRACT");
                     memory.setCategory(category);
                     memory.setContent(content);
-                    Object importance = item.get("importance");
-                    memory.setImportance(importance instanceof Number ? ((Number) importance).shortValue() : (short) 3);
+                    memory.setImportance(item.importance() != null ? item.importance().shortValue() : (short) 3);
 
-                    String schedDate = (String) item.get("schedule_date");
-                    if (schedDate != null && !schedDate.isBlank() && !"null".equals(schedDate)) {
+                    if (item.scheduleDate() != null && !item.scheduleDate().isBlank() && !"null".equals(item.scheduleDate())) {
                         try {
-                            memory.setScheduleDate(LocalDate.parse(schedDate));
+                            memory.setScheduleDate(LocalDate.parse(item.scheduleDate()));
                         } catch (DateTimeParseException ignored) {}
                     }
-                    memory.setScheduleTime((String) item.get("schedule_time"));
+                    memory.setScheduleTime(item.scheduleTime());
 
-                    Object numVal = item.get("numeric_value");
-                    if (numVal instanceof Number) {
-                        memory.setNumericValue(BigDecimal.valueOf(((Number) numVal).doubleValue()));
+                    if (item.numericValue() != null) {
+                        memory.setNumericValue(BigDecimal.valueOf(item.numericValue()));
                     }
                     memory.setStatus(MemoryStatus.ACTIVE);
                     memoryService.createFromExtraction(memory);
@@ -167,7 +163,7 @@ public class MemoryExtractionService {
         }
     }
 
-    private List<Map<String, Object>> callExtraction(PipelineConfig config, Long userId,
+    private List<ExtractedMemory> callExtraction(PipelineConfig config, Long userId,
                                                       List<UserMemory> existing,
                                                       String userMessage, String assistantMessage,
                                                       String promptText) {
@@ -176,19 +172,7 @@ public class MemoryExtractionService {
                 config, userId, existing, userMessage, assistantMessage, promptText);
             if (viaPython.isPresent() && viaPython.get().memories() != null) {
                 log.info("Memory extraction via first-ai-service for user {}", userId);
-                return viaPython.get().memories().stream()
-                    .map(m -> {
-                        Map<String, Object> map = new LinkedHashMap<>();
-                        map.put("category", m.category());
-                        map.put("content", m.content());
-                        map.put("importance", m.importance());
-                        if (m.scheduleDate() != null) map.put("schedule_date", m.scheduleDate());
-                        if (m.scheduleTime() != null) map.put("schedule_time", m.scheduleTime());
-                        if (m.numericValue() != null) map.put("numeric_value", m.numericValue());
-                        if (m.unit() != null) map.put("unit", m.unit());
-                        return map;
-                    })
-                    .toList();
+                return viaPython.get().memories();
             }
         }
         log.error("Memory extraction unavailable for user {}", userId);
