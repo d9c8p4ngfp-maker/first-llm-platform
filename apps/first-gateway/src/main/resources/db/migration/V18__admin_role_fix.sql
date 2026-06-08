@@ -13,7 +13,7 @@ WHERE NOT EXISTS (SELECT 1 FROM `user` WHERE username = 'platform_admin');
 SET @platform_admin_id = (SELECT id FROM `user` WHERE username = 'platform_admin');
 SET @def_tenant = (SELECT id FROM tenant ORDER BY id LIMIT 1);
 
-INSERT INTO user_tenant_rel (user_id, tenant_id, role, created_at)
+INSERT INTO user_tenant_rel (user_id, tenant_id, role, joined_at)
 VALUES (@platform_admin_id, @def_tenant, 'PLATFORM_ADMIN', NOW())
 ON DUPLICATE KEY UPDATE role = 'PLATFORM_ADMIN';
 
@@ -26,6 +26,6 @@ WHERE user_id = (SELECT id FROM `user` WHERE username = 'admin' LIMIT 1);
 UPDATE user_tenant_rel SET role = 'MEMBER' WHERE role = 'OWNER';
 
 -- 4. Close public registration
-INSERT INTO system_config (config_key, config_value, created_at, updated_at)
-VALUES ('register_enabled', 'false', NOW(), NOW())
+INSERT INTO system_config (config_key, config_value, updated_at)
+VALUES ('register_enabled', 'false', NOW())
 ON DUPLICATE KEY UPDATE config_value = 'false';

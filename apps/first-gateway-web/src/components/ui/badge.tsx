@@ -6,9 +6,14 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: 'border-transparent bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]',
-        secondary: 'border-transparent bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]',
-        outline: 'text-[hsl(var(--foreground))]',
+        default:
+          'border-transparent bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]',
+        secondary:
+          'border-transparent bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]',
+        outline:
+          'text-[hsl(var(--foreground))] border-[hsl(var(--border))]',
+        brand:
+          'border-brand/30 bg-brand-muted text-brand',
       },
     },
     defaultVariants: { variant: 'default' },

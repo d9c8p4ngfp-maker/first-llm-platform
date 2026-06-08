@@ -79,7 +79,7 @@ export function RegisterPage() {
           <CardContent>
             <Link
               to="/login"
-              className="inline-flex w-full items-center justify-center rounded-md bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-[hsl(var(--primary-foreground))] hover:opacity-90"
+              className="inline-flex w-full items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-medium text-[hsl(var(--brand-foreground))] hover:opacity-90"
             >
               {authZh.backLogin}
             </Link>

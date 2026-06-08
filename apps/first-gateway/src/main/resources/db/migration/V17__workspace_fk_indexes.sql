@@ -66,7 +66,8 @@ UPDATE pipeline_config SET user_id = 0 WHERE scope = 'SYSTEM' AND user_id IS NUL
 
 ALTER TABLE pipeline_config MODIFY user_id BIGINT NOT NULL DEFAULT 0;
 
-DROP INDEX uk_pipeline_key_scope_user ON pipeline_config;
+-- DROP INDEX uk_pipeline_key_scope_user ON pipeline_config;
+ALTER TABLE pipeline_config DROP INDEX uk_pipeline_key_scope_user;
 CREATE UNIQUE INDEX uk_pipeline_key_scope_user ON pipeline_config (config_key, scope, user_id);
 
 -- pipeline_config FK kept commented (column nullable)

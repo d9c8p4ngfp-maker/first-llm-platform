@@ -48,51 +48,60 @@ export function ConversationList({
     <div className="flex h-full flex-col gap-3">
       <Button
         variant="outline"
-        className="w-full justify-start gap-2 border-brand/25 hover:border-brand/40 hover:bg-brand-muted"
+        size="sm"
+        className="w-full justify-start gap-2 border-brand/20 text-[13px] hover:border-brand/30 hover:bg-brand-muted/70"
         onClick={onNew}
         disabled={creating}
       >
-        <Plus className="h-4 w-4 text-brand" />
-        新建对话
+        <Plus className="h-4 w-4 text-brand" strokeWidth={1.75} />
+        新对话
       </Button>
-      <div className="flex-1 overflow-y-auto rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-2 shadow-console">
+      <div className="flex-1 overflow-y-auto rounded-xl border border-[hsl(var(--border))]/80 bg-[hsl(var(--card))] p-2 shadow-console">
         {groups.length === 0 ? (
-          <p className="px-2 py-6 text-center text-xs text-[hsl(var(--muted-foreground))]">暂无历史对话</p>
+          <p className="px-2 py-8 text-center text-xs text-[hsl(var(--muted-foreground))]">
+            暂无历史对话
+          </p>
         ) : (
           <ul className="space-y-3">
             {groups.map((g) => (
               <li key={g.label}>
-                <p className="mb-1 px-2 font-mono-brand text-[10px] font-medium uppercase tracking-widest text-brand">
+                <p className="mb-1.5 px-2 font-mono-brand text-[10px] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
                   {g.label}
                 </p>
                 <ul className="space-y-0.5">
                   {g.items.map((c) => (
-                    <li key={c.id} className="group flex items-center gap-0.5">
+                    <li key={c.id} className="group relative flex items-center">
                       <button
                         type="button"
                         onClick={() => onSelect(c.id)}
                         className={cn(
-                          'conv-item-spell min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:bg-[hsl(var(--accent))]',
-                          activeId === c.id &&
-                            'border-l-2 border-brand bg-brand-muted/60 pl-[calc(0.5rem-2px)] font-medium',
+                          'conv-item-spell flex-1 rounded-lg px-2.5 py-2 text-left text-[13px] leading-snug transition-colors',
+                          'hover:bg-[hsl(var(--accent))]',
+                          activeId === c.id
+                            ? 'bg-[hsl(var(--accent))] font-medium text-[hsl(var(--foreground))]'
+                            : 'text-[hsl(var(--foreground))]/85',
                         )}
                       >
-                        <span className="line-clamp-2">{c.summary || `Chat #${c.id}`}</span>
+                        <span className="line-clamp-2">{c.summary || `对话 ${c.id}`}</span>
                       </button>
-                      <button
-                        type="button"
-                        className="rounded p-1 opacity-0 hover:bg-[hsl(var(--accent))] group-hover:opacity-100 focus-visible:opacity-100"
-                        onClick={() => onRename(c)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded p-1 opacity-0 hover:bg-[hsl(var(--accent))] group-hover:opacity-100 focus-visible:opacity-100"
-                        onClick={() => onDelete(c.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                      </button>
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2 flex opacity-0 transition-opacity group-hover:opacity-100">
+                        <button
+                          type="button"
+                          className="rounded p-1 hover:bg-[hsl(var(--muted))] transition-colors"
+                          onClick={(e) => { e.stopPropagation(); onRename(c) }}
+                          title="重命名"
+                        >
+                          <Pencil className="h-3 w-3 text-[hsl(var(--muted-foreground))]" />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded p-1 hover:bg-[hsl(var(--muted))] transition-colors"
+                          onClick={(e) => { e.stopPropagation(); onDelete(c.id) }}
+                          title="删除"
+                        >
+                          <Trash2 className="h-3 w-3 text-red-400" />
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>

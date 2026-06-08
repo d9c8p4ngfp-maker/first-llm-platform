@@ -1,19 +1,18 @@
 import apiClient from './client'
 
-export interface UserProfile {
-  nickname: string
-  mbti?: string | null
-  mbti_label?: string | null
-  zodiac?: string | null
-  primary_tag?: string | null
-  tags: string[]
-  memory_count: number
-  schedule_count: number
-  profile_ready: boolean
+export interface ProfileStatus {
+  memoryEnabled: boolean
+  profileEnabled: boolean
+  profileInChat: boolean
 }
 
 export const profileApi = {
-  me: (): Promise<UserProfile> => apiClient.get('/api/v1/user-profiles/me'),
-  refresh: (): Promise<UserProfile> => apiClient.post('/api/v1/user-profiles/me/refresh'),
-  clear: (): Promise<void> => apiClient.delete('/api/v1/user-profiles/me'),
+  me: (): Promise<Record<string, unknown>> =>
+    apiClient.get('/api/v1/profile/me'),
+  getStatus: (): Promise<ProfileStatus> =>
+    apiClient.get('/api/v1/profile/status'),
+  updateStatus: (body: ProfileStatus): Promise<ProfileStatus> =>
+    apiClient.put('/api/v1/profile/status', body),
+  refresh: (): Promise<Record<string, unknown>> =>
+    apiClient.post('/api/v1/profile/refresh'),
 }

@@ -24,7 +24,6 @@ import { SkillsPage } from '@/pages/tools/SkillsPage'
 import { McpPage } from '@/pages/tools/McpPage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
-import { PipelinePage } from '@/pages/settings/PipelinePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { useAuthStore } from '@/stores/auth'
 
@@ -178,12 +177,6 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 })
 
-const pipelineRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: '/settings/pipeline',
-  component: PipelinePage,
-})
-
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -216,7 +209,6 @@ const routeTree = rootRoute.addChildren([
     ]),
     profileRoute,
     settingsRoute,
-    pipelineRoute,
   ]),
 ])
 

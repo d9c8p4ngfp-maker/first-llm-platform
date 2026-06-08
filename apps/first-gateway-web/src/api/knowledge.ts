@@ -24,4 +24,11 @@ export const knowledgeApi = {
     apiClient.post('/api/v1/knowledge-bases/public', { name, description }),
   importUrl: (kbId: number, url: string, title?: string): Promise<KnowledgeDocument> =>
     apiClient.post(`/api/v1/knowledge-bases/${kbId}/import-url`, { url, title }),
+
+  uploadDocument: (kbId: number, file: File, title?: string): Promise<KnowledgeDocument> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (title) formData.append('title', title)
+    return apiClient.post(`/api/v1/knowledge-bases/${kbId}/documents/upload`, formData)
+  },
 }

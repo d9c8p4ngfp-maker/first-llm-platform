@@ -19,19 +19,20 @@ export function SkillBar({ selectedId, onSelect }: SkillBarProps) {
   if (enabled.length === 0) return null
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto border-b border-[hsl(var(--border))] px-3 py-2">
-      <Sparkles className="h-4 w-4 shrink-0 text-[hsl(var(--muted-foreground))]" />
+    <div className="flex items-center gap-2 overflow-x-auto border-b border-[hsl(var(--border))]/60 px-3 py-2 scrollbar-none">
+      <Sparkles className="h-4 w-4 shrink-0 text-brand" strokeWidth={1.5} />
       <button
         type="button"
         onClick={() => onSelect(null)}
         className={cn(
-          'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+          'shrink-0 rounded-lg border px-3 py-1 text-[13px] font-medium transition-all',
+          'active:scale-[0.97]',
           selectedId === null
-            ? 'border-[hsl(var(--foreground))] bg-[hsl(var(--muted))]'
-            : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]',
+            ? 'border-[hsl(var(--foreground))]/20 bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]'
+            : 'border-transparent text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]/50',
         )}
       >
-        无
+        默认
       </button>
       {enabled.map((s) => (
         <button
@@ -39,10 +40,11 @@ export function SkillBar({ selectedId, onSelect }: SkillBarProps) {
           type="button"
           onClick={() => onSelect(selectedId === s.id ? null : s)}
           className={cn(
-            'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+            'shrink-0 rounded-lg border px-3 py-1 text-[13px] font-medium transition-all',
+            'active:scale-[0.97]',
             selectedId === s.id
-              ? 'border-[hsl(var(--foreground))] bg-[hsl(var(--muted))]'
-              : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]',
+              ? 'border-brand/30 bg-brand-muted text-brand'
+              : 'border-transparent text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]/50',
           )}
         >
           {s.name}

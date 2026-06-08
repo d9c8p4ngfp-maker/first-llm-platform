@@ -1,7 +1,7 @@
 import { Link, useParams } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { AlertTriangle, ArrowLeft, FileText, Globe, Link as LinkIcon, Loader2, PenLine, Plus, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { AlertTriangle, ArrowLeft, FileText, Globe, Link as LinkIcon, Loader2, PenLine, Plus, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -69,6 +69,17 @@ export function KnowledgeDetailPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<{ content: string; score: number; documentTitle?: string }[]>([])
   const [searching, setSearching] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function resetUploadDialog() {
+    setUploadOpen(false)
+    setSelectedFile(null)
+    setUploadError(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   async function handleSearch() {
     if (!searchQuery.trim()) return
@@ -134,6 +145,22 @@ export function KnowledgeDetailPage() {
     },
   })
 
+  const uploadMut = useMutation({
+    mutationFn: () => {
+      if (!selectedFile) throw new Error('No file selected')
+      return knowledgeApi.uploadDocument(id, selectedFile, selectedFile.name)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['knowledge-docs', id] })
+      qc.invalidateQueries({ queryKey: ['knowledge-base', id] })
+      resetUploadDialog()
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : '上传失败'
+      setUploadError(message)
+    },
+  })
+
   if (isLoading) return <p className="text-sm text-[hsl(var(--muted-foreground))]">Loading...</p>
   if (!kb) return <p className="text-sm text-red-600">知识库不存在</p>
 
@@ -152,6 +179,10 @@ export function KnowledgeDetailPage() {
         <Button onClick={() => setOpen(true)}>
           <Plus className="mr-1 h-4 w-4" />
           添加文档
+        </Button>
+        <Button variant="outline" onClick={() => setUploadOpen(true)}>
+          <Upload className="mr-1 h-4 w-4" />
+          上传文件
         </Button>
         <Button variant="outline" onClick={() => setUrlOpen(true)}>
           <LinkIcon className="mr-1 h-4 w-4" />
@@ -182,15 +213,10 @@ export function KnowledgeDetailPage() {
                 <td className="px-4 py-2 text-[hsl(var(--muted-foreground))]">{d.updatedAt}</td>
                 <td className="px-4 py-2">
                   <div className="flex gap-2">
-                    {d.syncStatus === 'FAILED' && (
+                    {(d.syncStatus === 'FAILED' || d.syncStatus === 'PENDING') && (
                       <Button variant="outline" className="h-8" onClick={() => reindexDoc(d.id)} disabled={reindexingId === d.id}>
                         {reindexingId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                         重试
-                      </Button>
-                    )}
-                    {d.syncStatus !== 'FAILED' && (
-                      <Button variant="outline" className="h-8" onClick={() => reindexDoc(d.id)} disabled={reindexingId === d.id}>
-                        {reindexingId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                       </Button>
                     )}
                     <Button
@@ -209,7 +235,7 @@ export function KnowledgeDetailPage() {
             {docs.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-10 text-center text-[hsl(var(--muted-foreground))]">
-                  暂无文档，点击添加文档或导入URL创建
+                  暂无文档，点击添加文档、上传文件或导入URL创建
                 </td>
               </tr>
             )}
@@ -309,6 +335,48 @@ export function KnowledgeDetailPage() {
               placeholder="留空自动提取"
               value={importTitle}
               onChange={(e) => setImportTitle(e.target.value)}
+            />
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={uploadOpen}
+        onClose={resetUploadDialog}
+        title="上传文件"
+        footer={
+          <>
+            <DialogCloseButton onClick={resetUploadDialog} label="取消" />
+            <Button onClick={() => uploadMut.mutate()} disabled={!selectedFile || uploadMut.isPending}>
+              {uploadMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : '上传'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">
+            支持 PDF、Word、Markdown、TXT 等文档格式，系统将自动解析并建立索引
+          </p>
+          {uploadError && (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{uploadError}</p>
+          )}
+          <div
+            className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-[hsl(var(--border))] p-8 transition-colors hover:border-[hsl(var(--primary))]"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="h-8 w-8 text-[hsl(var(--muted-foreground))]" />
+            <p className="text-sm text-[hsl(var(--muted-foreground))]">
+              {selectedFile ? selectedFile.name : '点击选择文件或拖拽到此处'}
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".pdf,.doc,.docx,.md,.txt,.html,.csv,.json,.xml"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null
+                setSelectedFile(file)
+              }}
             />
           </div>
         </div>

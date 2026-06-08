@@ -36,75 +36,76 @@ export function InfoBar() {
   const business = data?.business_highlights ?? []
 
   const profileLine = profile
-    ? [profile.nickname, profile.mbti, profile.zodiac, profile.primary_tag].filter(Boolean).join(' · ') ||
+    ? [profile.nickname, profile.mbti, profile.zodiac, profile.primary_tag].filter(Boolean).join('  ') ||
       profile.nickname
     : ''
 
-  const statsLine = stats ? `今日 ${stats.requests}次 · ${formatTokens(stats.tokens)} Token` : ''
+  const statsLine = stats ? `${stats.requests}次 ${formatTokens(stats.tokens)} Token` : ''
 
   if (isLoading && !data) {
     return (
-      <div className="info-bar-accent border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-3">
-        <Skeleton className="h-4 w-2/3 max-w-xl" />
+      <div className="px-4 pt-2 pb-1 md:px-6">
+        <div className="ios-grouped px-4 py-3">
+          <Skeleton className="h-4 w-2/3 max-w-xl" />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="relative border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-      <div className="info-bar-accent pointer-events-none absolute inset-0" aria-hidden />
-      <div className="absolute left-0 top-0 h-full w-0.5 bg-brand opacity-80" aria-hidden />
-      <button
-        type="button"
-        onClick={toggle}
-        className={cn(
-          'relative flex w-full items-start gap-2 px-4 py-2.5 text-left text-sm transition-colors md:py-3',
-          'hover:bg-[hsl(var(--accent))]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--card))]',
-        )}
-      >
+    <div className="px-4 pt-2 pb-1 md:px-6">
+      <div className="ios-grouped overflow-hidden">
+        <button
+          type="button"
+          onClick={toggle}
+          className={cn(
+            'relative flex w-full items-start gap-2 px-4 py-3 text-left text-sm transition-colors',
+            'active:bg-[hsl(var(--accent))]/60 focus-visible:outline-none',
+          )}
+        >
         <div className="min-w-0 flex-1 space-y-1.5">
           {!expanded ? (
-            <div className="flex min-w-0 items-center gap-2">
-              <p className="flex shrink-0 items-center truncate text-[hsl(var(--foreground))]">
-                <User className="mr-1.5 inline h-3.5 w-3.5 text-brand" />
-                {profileLine || '—'}
-              </p>
-              <span className="shrink-0 text-[hsl(var(--border))]">|</span>
-              <Calendar className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--muted-foreground))]" />
-              <ScheduleMarquee items={schedule} emptyLabel={'\u6682\u65e0\u65e5\u7a0b'} expanded={false} />
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="flex shrink-0 items-center gap-1.5 truncate text-[hsl(var(--foreground))]">
+                <User className="h-3.5 w-3.5 text-brand" strokeWidth={1.75} />
+                <span className="text-[13px]">{profileLine || '-'}</span>
+              </span>
               {statsLine && (
-                <>
-                  <span className="shrink-0 text-[hsl(var(--border))]">|</span>
-                  <p className="flex shrink-0 items-center truncate font-medium tabular-nums text-[hsl(var(--foreground))]">
-                    <BarChart3 className="mr-1.5 inline h-3.5 w-3.5 text-brand" />
-                    {statsLine}
-                  </p>
-                </>
+                <span className="flex shrink-0 items-center gap-1.5 font-medium tabular-nums text-[hsl(var(--foreground))]">
+                  <BarChart3 className="h-3.5 w-3.5 text-brand" strokeWidth={1.75} />
+                  <span className="text-[13px]">{statsLine}</span>
+                </span>
               )}
+              <span className="flex min-w-0 items-center gap-1.5 text-[hsl(var(--muted-foreground))]">
+                <Calendar className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                <ScheduleMarquee items={schedule} emptyLabel="暂无日程" expanded={false} />
+              </span>
             </div>
           ) : (
             <>
               <p className="flex items-center gap-2">
-                <User className="h-4 w-4 text-brand" />
-                <span className="font-medium">{profileLine || '—'}</span>
+                <User className="h-4 w-4 text-brand" strokeWidth={1.75} />
+                <span className="font-medium">{profileLine || '-'}</span>
                 {!profile?.mbti && (
-                  <span className="rounded-full bg-brand-muted px-2 py-0.5 text-xs text-brand">画像待完善</span>
+                  <span className="rounded-full bg-brand-muted px-2 py-0.5 text-[11px] text-brand">
+                    画像待完善
+                  </span>
                 )}
               </p>
               <p className="flex items-start gap-2 text-[hsl(var(--muted-foreground))]">
-                <Calendar className="mt-0.5 h-4 w-4 shrink-0" />
-                <ScheduleMarquee items={schedule} emptyLabel={'\u6682\u65e0\u65e5\u7a0b'} expanded />
+                <Calendar className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
+                <ScheduleMarquee items={schedule} emptyLabel="暂无日程" expanded />
               </p>
               {stats && (
                 <p className="flex items-center gap-2 tabular-nums text-[hsl(var(--muted-foreground))]">
-                  <BarChart3 className="h-4 w-4 shrink-0 text-brand" />
-                  今日调用 {stats.requests} 次 · {formatTokens(stats.tokens)} Token
-                  {stats.cost > 0 && ` · ¥${stats.cost}`}
+                  <BarChart3 className="h-4 w-4 shrink-0 text-brand" strokeWidth={1.75} />
+                  今日 {stats.requests} 次调用，{formatTokens(stats.tokens)} Token
+                  {stats.cost > 0 && `，¥${stats.cost}`}
                 </p>
               )}
               {business.length > 0 && (
                 <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[hsl(var(--muted-foreground))]">
-                  <Flame className="h-4 w-4 shrink-0 text-brand" />
+                  <Flame className="h-4 w-4 shrink-0 text-brand" strokeWidth={1.75} />
                   {business.map((b) => (
                     <span key={b.label}>
                       {b.label} {b.unit}
@@ -123,9 +124,10 @@ export function InfoBar() {
             expanded && 'rotate-180',
           )}
         >
-          <ChevronDown className="h-4 w-4" />
+          <ChevronDown className="h-4 w-4" strokeWidth={1.75} />
         </span>
       </button>
+      </div>
     </div>
   )
 }

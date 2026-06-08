@@ -37,45 +37,66 @@ export function LoginPage() {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[hsl(var(--background))] p-4">
       <div
-        className="pointer-events-none absolute inset-0 opacity-60"
+        className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(ellipse 70% 50% at 50% -10%, hsl(var(--brand) / 0.15), transparent 55%)',
+            'radial-gradient(ellipse 60% 45% at 50% -5%, hsl(var(--brand) / 0.08), transparent 55%)',
         }}
         aria-hidden
       />
-      <Card className="relative w-full max-w-md border-[hsl(var(--border))] shadow-console">
-        <CardHeader className="space-y-3 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-brand font-mono-brand text-sm font-semibold text-[hsl(var(--brand-foreground))]">
+      <Card className="relative w-full max-w-sm border-[hsl(var(--border))]/80">
+        <CardHeader className="space-y-4 text-center pb-6">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-brand font-mono-brand text-sm font-bold text-[hsl(var(--brand-foreground))] shadow-sm">
             FG
           </div>
-          <CardTitle className="font-display text-xl">
-            <span className="text-brand">First</span> Gateway
-          </CardTitle>
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">登录后管理渠道、Token 与对话</p>
+          <div>
+            <CardTitle className="font-display text-xl tracking-tight">
+              <span className="text-brand">First</span> Gateway
+            </CardTitle>
+            <p className="mt-2 text-[13px] text-[hsl(var(--muted-foreground))]">
+              登录后管理渠道、Token 与对话
+            </p>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="username">用户名</Label>
-              <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+              <Input
+                id="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                required
+              />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="password">密码</Label>
-              <Input id="password" type="password" value={password}
+              <Input
+                id="password"
+                type="password"
+                value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 required
               />
             </div>
-            {error && <p className="text-sm text-[hsl(var(--destructive))]" role="alert">{error}</p>}
-            <Button type="submit" className="w-full bg-brand text-[hsl(var(--brand-foreground))] hover:opacity-95" disabled={loading}>
+            {error && (
+              <p className="text-sm text-[hsl(var(--destructive))]" role="alert">
+                {error}
+              </p>
+            )}
+            <Button
+              type="submit"
+              className="w-full bg-brand text-[hsl(var(--brand-foreground))] hover:bg-brand/90"
+              disabled={loading}
+            >
               {loading ? '登录中...' : '登录'}
             </Button>
             {registerEnabled && (
-              <p className="text-center text-sm text-[hsl(var(--muted-foreground))]">
-                还没有账号？{' '}
-                <Link to="/register" className="font-medium text-brand hover:underline">
+              <p className="text-center text-[13px] text-[hsl(var(--muted-foreground))]">
+                还没有账号？
+                <Link to="/register" className="ml-1 font-medium text-brand hover:underline">
                   立即注册
                 </Link>
               </p>

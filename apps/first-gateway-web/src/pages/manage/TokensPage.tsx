@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { KeyRevealModal } from '@/components/shared/KeyRevealModal'
+import { Skeleton } from '@/components/ui/skeleton'
 import { tokensApi } from '@/api/workspace'
 import { useAuthStore } from '@/stores/auth'
 
@@ -35,7 +36,14 @@ export function TokensPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tokens'] }),
   })
 
-  if (isLoading) return <p className="text-sm text-neutral-500">Loading...</p>
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-4">
+        <Skeleton className="h-8 w-40 rounded-lg" />
+        <Skeleton className="h-48 rounded-xl" />
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -45,29 +53,42 @@ export function TokensPage() {
         action={
           <div className="flex gap-2">
             <Input placeholder="名称（可选）" value={name} onChange={(e) => setName(e.target.value)} className="w-40" />
-            <Button onClick={() => createMut.mutate()} disabled={createMut.isPending}>
-              <Plus className="mr-1 h-4 w-4" />
+            <Button size="sm" onClick={() => createMut.mutate()} disabled={createMut.isPending}>
+              <Plus className="h-4 w-4" strokeWidth={1.75} />
               创建
             </Button>
           </div>
         }
       />
-      <ul className="divide-y divide-[hsl(var(--border))] rounded-lg border border-[hsl(var(--border))]">
-        {tokens.map((t) => (
-          <li key={t.id} className="flex items-center justify-between px-4 py-3 text-sm">
-            <div>
-              <p className="font-medium">{t.name || '未命名'}</p>
-              <p className="text-neutral-500">{t.keyPrefix}... · {t.status}</p>
-            </div>
-            <Button variant="destructive" className="h-8" onClick={() => revokeMut.mutate(t.id)}>
-              撤销
-            </Button>
-          </li>
-        ))}
-        {tokens.length === 0 && (
-          <li className="px-4 py-8 text-center text-sm text-neutral-500">暂无 Token</li>
-        )}
-      </ul>
+      {tokens.length === 0 ? (
+        <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[hsl(var(--border))] p-12 text-center">
+          <p className="text-sm font-medium text-[hsl(var(--foreground))]">暂无 Token</p>
+          <p className="text-xs text-[hsl(var(--muted-foreground))]">
+            创建 Token 后可用于 API 调用
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-[hsl(var(--border))]/80 bg-[hsl(var(--card))] shadow-console overflow-hidden">
+          <div className="divide-y divide-[hsl(var(--border))]/60">
+            {tokens.map((t) => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between px-5 py-4 text-sm transition-colors hover:bg-[hsl(var(--accent))]/30"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium">{t.name || '未命名'}</p>
+                  <p className="mt-0.5 text-[13px] text-[hsl(var(--muted-foreground))]">
+                    {t.keyPrefix}... / {t.status}
+                  </p>
+                </div>
+                <Button variant="destructive" size="sm" onClick={() => revokeMut.mutate(t.id)}>
+                  撤销
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <KeyRevealModal
         open={modalOpen}
         apiKey={revealedKey}
