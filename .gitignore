@@ -50,3 +50,4 @@ Thumbs.db
 tooling/scripts/_utf8test.txt
 tooling/scripts/_mem-lines.json
 .worktrees/
+.codegraph/
