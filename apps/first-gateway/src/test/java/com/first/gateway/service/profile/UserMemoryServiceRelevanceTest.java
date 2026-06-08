@@ -32,7 +32,7 @@ class UserMemoryServiceRelevanceTest {
     @Test
     void listRelevantForChat_shouldMatchScheduleMemoriesForScheduleQuery() {
         UserMemory schedule = memory(2L, MemoryCategory.SCHEDULE, "后天去飞天");
-        UserMemory unrelated = memory(3L, MemoryCategory.SCHEDULE, "明天下午去hi饭");
+        UserMemory unrelated = memory(3L, MemoryCategory.FACT, "周末去公园打篮球");
         when(memoryRepository.findByUserIdAndStatusOrderByCreatedAtDesc(1L, MemoryStatus.ACTIVE))
             .thenReturn(List.of(unrelated, schedule));
 

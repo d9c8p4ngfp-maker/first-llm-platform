@@ -12,7 +12,10 @@ import com.first.gateway.repository.QuotaRepository;
 import com.first.gateway.repository.TenantRepository;
 import com.first.gateway.repository.UserRepository;
 import com.first.gateway.repository.UserTenantRelRepository;
+import com.first.gateway.repository.ChannelModelRepository;
+import com.first.gateway.repository.ChannelRepository;
 import com.first.gateway.service.billing.BillingService;
+import com.first.gateway.service.channel.ChannelService;
 import com.first.gateway.service.system.SystemConfigService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +57,12 @@ class UserServiceTest {
     private BillingService billingService;
     @Mock
     private PasswordEncoder passwordEncoder;
+    @Mock
+    private ChannelModelRepository channelModelRepository;
+    @Mock
+    private ChannelRepository channelRepository;
+    @Mock
+    private ChannelService channelService;
 
     private UserService userService;
 
@@ -61,7 +70,8 @@ class UserServiceTest {
     void setUp() {
         userService = new UserService(
             userRepository, tenantRepository, userTenantRelRepository, quotaRepository,
-            userGroupService, systemConfigService, billingService, passwordEncoder);
+            userGroupService, systemConfigService, billingService, passwordEncoder,
+            channelModelRepository, channelRepository, channelService);
     }
 
     @Test

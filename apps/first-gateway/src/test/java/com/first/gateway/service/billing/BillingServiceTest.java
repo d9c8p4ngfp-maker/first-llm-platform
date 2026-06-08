@@ -6,6 +6,7 @@ import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
 import com.first.gateway.repository.BillingRetryRepository;
 import com.first.gateway.repository.QuotaRepository;
+import com.first.gateway.service.channel.ChannelService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,12 +31,14 @@ class BillingServiceTest {
     private BillingRecordService billingRecordService;
     @Mock
     private BillingRetryRepository billingRetryRepository;
+    @Mock
+    private ChannelService channelService;
 
     private BillingService billingService;
 
     @BeforeEach
     void setUp() {
-        billingService = new BillingService(quotaRepository, billingRecordService, billingRetryRepository);
+        billingService = new BillingService(quotaRepository, billingRecordService, billingRetryRepository, channelService);
     }
 
     @Test
