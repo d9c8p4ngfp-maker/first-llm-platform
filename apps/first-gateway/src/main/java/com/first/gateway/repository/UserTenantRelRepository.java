@@ -17,6 +17,6 @@ public interface UserTenantRelRepository extends JpaRepository<UserTenantRel, Lo
 
     Optional<UserTenantRel> findByUserIdAndTenantId(Long userId, Long tenantId);
 
-    @Query("SELECT r.user FROM UserTenantRel r WHERE r.tenantId = :tenantId")
+    @Query("SELECT u FROM UserTenantRel r JOIN User u ON r.userId = u.id WHERE r.tenantId = :tenantId")
     List<User> findUsersByTenantId(@Param("tenantId") Long tenantId);
 }

@@ -42,6 +42,7 @@ public interface ChannelModelRepository extends JpaRepository<ChannelModel, Long
         SELECT cm FROM ChannelModel cm, Channel c
         WHERE cm.channelId = c.id
           AND cm.enabled = 1
+          AND cm.modelType = 'CHAT'
           AND c.deleted = 0
           AND c.userId = :userId
         ORDER BY cm.modelName ASC

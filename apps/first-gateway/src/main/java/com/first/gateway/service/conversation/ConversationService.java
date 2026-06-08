@@ -55,7 +55,7 @@ public class ConversationService {
 
     public List<ConversationMessage> listMessages(Long conversationId, Long tenantId) {
         requireByTenant(conversationId, tenantId);
-        return messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
+        return messageRepository.findByConversationIdOrderByCreatedAtAscIdAsc(conversationId);
     }
 
     @Transactional
@@ -103,7 +103,7 @@ public class ConversationService {
 
     private java.util.Optional<String> findLatestUserMessage(Long conversationId) {
         List<ConversationMessage> messages =
-            messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
+            messageRepository.findByConversationIdOrderByCreatedAtAscIdAsc(conversationId);
         for (int i = messages.size() - 1; i >= 0; i--) {
             ConversationMessage msg = messages.get(i);
             if ("user".equalsIgnoreCase(msg.getRole())

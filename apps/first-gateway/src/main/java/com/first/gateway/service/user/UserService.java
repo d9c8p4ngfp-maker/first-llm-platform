@@ -1,26 +1,40 @@
 package com.first.gateway.service.user;
 
+import com.first.gateway.domain.entity.Channel;
+import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.domain.entity.Quota;
 import com.first.gateway.domain.entity.Tenant;
 import com.first.gateway.domain.entity.User;
 import com.first.gateway.domain.entity.UserGroup;
 import com.first.gateway.domain.entity.UserTenantRel;
+import com.first.gateway.domain.enums.ModelType;
 import com.first.gateway.domain.enums.TenantRole;
 import com.first.gateway.domain.enums.UserStatus;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
+import com.first.gateway.repository.ChannelModelRepository;
+import com.first.gateway.repository.ChannelRepository;
 import com.first.gateway.repository.QuotaRepository;
 import com.first.gateway.repository.TenantRepository;
 import com.first.gateway.repository.UserRepository;
 import com.first.gateway.repository.UserTenantRelRepository;
 import com.first.gateway.service.billing.BillingService;
+import com.first.gateway.service.channel.ChannelService;
 import com.first.gateway.service.system.SystemConfigService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 @Service
 public class UserService {
+
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
     private final UserRepository userRepository;
     private final TenantRepository tenantRepository;
@@ -30,6 +44,9 @@ public class UserService {
     private final SystemConfigService systemConfigService;
     private final BillingService billingService;
     private final PasswordEncoder passwordEncoder;
+    private final ChannelModelRepository channelModelRepository;
+    private final ChannelRepository channelRepository;
+    private final ChannelService channelService;
 
     public UserService(UserRepository userRepository,
                        TenantRepository tenantRepository,
@@ -38,7 +55,10 @@ public class UserService {
                        UserGroupService userGroupService,
                        SystemConfigService systemConfigService,
                        BillingService billingService,
-                       PasswordEncoder passwordEncoder) {
+                       PasswordEncoder passwordEncoder,
+                       ChannelModelRepository channelModelRepository,
+                       ChannelRepository channelRepository,
+                       ChannelService channelService) {
         this.userRepository = userRepository;
         this.tenantRepository = tenantRepository;
         this.userTenantRelRepository = userTenantRelRepository;
@@ -47,6 +67,9 @@ public class UserService {
         this.systemConfigService = systemConfigService;
         this.billingService = billingService;
         this.passwordEncoder = passwordEncoder;
+        this.channelModelRepository = channelModelRepository;
+        this.channelRepository = channelRepository;
+        this.channelService = channelService;
     }
 
     @Transactional
@@ -87,7 +110,39 @@ public class UserService {
         quota.setTotalTokens(defaultQuota);
         quotaRepository.save(quota);
 
+        cloneDefaultChannels(tenant.getId(), user.getId());
+
         return user;
+    }
+
+    private void cloneDefaultChannels(Long tenantId, Long userId) {
+        Set<Long> clonedChannelIds = new HashSet<>();
+
+        cloneBestChannel(ModelType.CHAT, tenantId, userId, clonedChannelIds);
+        cloneBestChannel(ModelType.EMBEDDING, tenantId, userId, clonedChannelIds);
+
+        log.info("cloned {} default channels for new user {}", clonedChannelIds.size(), userId);
+    }
+
+    private void cloneBestChannel(ModelType modelType, Long tenantId, Long userId, Set<Long> clonedChannelIds) {
+        List<ChannelModel> models = channelModelRepository.findByModelTypeEnabled(modelType);
+        if (models.isEmpty()) {
+            log.warn("no {} model available for new user {}", modelType, userId);
+            return;
+        }
+        ChannelModel best = models.get(0);
+        Long sourceChannelId = best.getChannelId();
+        if (!clonedChannelIds.add(sourceChannelId)) {
+            return;
+        }
+        Channel source = channelRepository.findById(sourceChannelId)
+            .orElse(null);
+        if (source == null) {
+            log.warn("channel {} not found for model {}", sourceChannelId, best.getModelName());
+            return;
+        }
+        channelService.cloneForUser(source, tenantId, userId);
+        log.info("cloned channel {} ({}) for new user {}", sourceChannelId, best.getModelName(), userId);
     }
 
     @Transactional

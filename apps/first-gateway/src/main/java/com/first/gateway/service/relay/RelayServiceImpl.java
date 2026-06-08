@@ -206,7 +206,7 @@ public class RelayServiceImpl implements RelayService {
         }
         long reserved = BillingCostCalculator.estimateReserveCost(
             enhancedRequest, candidates.getFirst().model(), groupRatio);
-        billingService.preReserve(auth.apiKey().getTenantId(), reserved);
+        billingService.preReserve(auth.apiKey().getTenantId(), auth.user().getId(), reserved);
 
         try {
             return executeWithChannelFallback(candidates, auth, enhancedModel, false, started, tpmReserved,
@@ -252,7 +252,7 @@ public class RelayServiceImpl implements RelayService {
         }
         long reserved = BillingCostCalculator.estimateReserveCost(
             enhancedRequest, candidates.getFirst().model(), groupRatio);
-        billingService.preReserve(auth.apiKey().getTenantId(), reserved);
+        billingService.preReserve(auth.apiKey().getTenantId(), auth.user().getId(), reserved);
 
         AtomicBoolean chunkSent = new AtomicBoolean(false);
         try {
@@ -316,7 +316,7 @@ public class RelayServiceImpl implements RelayService {
         billingRequest.putIfAbsent("max_tokens", 1);
         long reserved = BillingCostCalculator.estimateReserveCost(
             billingRequest, candidates.getFirst().model(), groupRatio);
-        billingService.preReserve(auth.apiKey().getTenantId(), reserved);
+        billingService.preReserve(auth.apiKey().getTenantId(), auth.user().getId(), reserved);
 
         try {
             return executeWithChannelFallback(candidates, auth, model, false, started, tpmReserved,
@@ -379,12 +379,21 @@ public class RelayServiceImpl implements RelayService {
     private boolean tryPythonChatStream(Long userId, Long tenantId, ChannelSelection selection,
                                         Map<String, Object> upstreamRequest, StreamConsumer consumer) {
         if (!aiServiceProperties.isChat() || !aiServiceClient.isHealthy()) {
+            log.info("Python chat stream skipped: isChat={}, isHealthy={}",
+                aiServiceProperties.isChat(), aiServiceClient.isHealthy());
             return false;
         }
         ChatRequest body = buildPythonChatBody(userId, tenantId, selection, upstreamRequest, true);
+        log.info("Sending chat to AI service: ragChunks={}, memories={}, profile={}, model={}",
+            body.ragContext() != null ? body.ragContext().size() : 0,
+            body.userMemories() != null ? body.userMemories().size() : 0,
+            body.userProfile() != null,
+            body.model());
         boolean ok = aiServiceClient.chatStream(body, chunk -> consumer.accept(chunk));
         if (ok) {
-            log.debug("Chat stream via first-ai-service for user {}", userId);
+            log.info("Chat stream via first-ai-service for user {}", userId);
+        } else {
+            log.warn("Chat stream via first-ai-service FAILED for user {}, falling back to direct", userId);
         }
         return ok;
     }
@@ -428,15 +437,19 @@ public class RelayServiceImpl implements RelayService {
             profileCtx = new UserProfileContext(profile.getAiSystemPrompt(), parseTags(profile.getAiTags()));
         }
 
-        List<UserMemory> memories = userMemoryService.listForUser(userId, null);
+        String query = extractLastUserMessage(upstreamRequest);
+
+        List<UserMemory> memories = userMemoryService.listRelevantForChat(
+            userId, query, MAX_USER_MEMORIES_IN_CHAT);
         List<MemoryContext> memCtxs = new ArrayList<>();
-        int limit = Math.min(memories.size(), MAX_USER_MEMORIES_IN_CHAT);
-        for (int i = 0; i < limit; i++) {
-            UserMemory m = memories.get(i);
+        for (UserMemory m : memories) {
             memCtxs.add(new MemoryContext(
                 m.getCategory() != null ? m.getCategory().name() : "",
                 m.getContent()));
         }
+        log.info("Memory injection: query={}, injected {} of max {}",
+            query != null ? query.substring(0, Math.min(30, query.length())) : "null",
+            memCtxs.size(), MAX_USER_MEMORIES_IN_CHAT);
 
         UpstreamConfig upstream = new UpstreamConfig(
             channel.getBaseUrl(),
@@ -445,12 +458,26 @@ public class RelayServiceImpl implements RelayService {
 
         List<Number> kbIds = (List<Number>) upstreamRequest.get("x_knowledge_base_ids");
         List<RagChunkResult> ragContext = List.of();
-        if (kbIds != null && !kbIds.isEmpty()) {
-            String query = extractLastUserMessage(upstreamRequest);
-            if (query != null && !query.isBlank()) {
+        log.info("RAG injection check: x_knowledge_base_ids={}, isEmpty={}",
+            kbIds, kbIds != null ? kbIds.isEmpty() : "null");
+
+        // Always run RAG search: user-selected KBs if any, otherwise auto public KBs
+        if (query != null && !query.isBlank()) {
+            if (kbIds != null && !kbIds.isEmpty()) {
+                // User selected specific KBs — search only those
+                List<Long> ids = kbIds.stream().map(Number::longValue).toList();
+                log.info("RAG search: query={}, userSelectedKbIds={}", query.substring(0, Math.min(50, query.length())), ids);
+                var ragResult = knowledgeBaseService.searchByIds(ids, query, 5);
+                ragContext = ragResult.map(RagQueryResponse::chunks).orElse(List.of());
+            } else {
+                // No KB selected — auto fallback to public KBs
+                log.info("RAG search: query={}, kbIds=auto-public", query.substring(0, Math.min(50, query.length())));
                 var ragResult = knowledgeBaseService.searchAll(tenantId, query, 5);
                 ragContext = ragResult.map(RagQueryResponse::chunks).orElse(List.of());
             }
+            log.info("RAG search result: found {} chunks", ragContext.size());
+        } else {
+            log.warn("RAG search skipped: no valid user query extracted");
         }
 
         return new ChatRequest(

@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -176,6 +177,86 @@ public class UserMemoryService {
         } catch (IllegalArgumentException e) {
             throw new GatewayException(GatewayError.INVALID_REQUEST, "invalid category: " + category);
         }
+    }
+
+    public List<UserMemory> listRelevantForChat(Long userId, String query, int maxResults) {
+        if (query == null || query.isBlank() || maxResults <= 0) {
+            return List.of();
+        }
+        List<UserMemory> all = memoryRepository.findByUserIdAndStatusOrderByCreatedAtDesc(userId, MemoryStatus.ACTIVE);
+        if (all.isEmpty()) {
+            return List.of();
+        }
+        String normalizedQuery = query.trim().toLowerCase();
+        return all.stream()
+            .map(memory -> Map.entry(memory, scoreMemoryRelevance(memory, normalizedQuery)))
+            .filter(entry -> entry.getValue() >= MIN_RELEVANCE_SCORE)
+            .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
+            .limit(maxResults)
+            .map(Map.Entry::getKey)
+            .toList();
+    }
+
+    private static final double MIN_RELEVANCE_SCORE = 2.0;
+
+    private static double scoreMemoryRelevance(UserMemory memory, String query) {
+        String content = memory.getContent();
+        if (content == null || content.isBlank()) {
+            return 0;
+        }
+        String normalizedContent = content.trim().toLowerCase();
+        double score = 0;
+
+        if (query.contains(normalizedContent) || normalizedContent.contains(query)) {
+            score += 6;
+        }
+
+        for (String token : tokenize(query)) {
+            if (token.length() >= 2 && normalizedContent.contains(token)) {
+                score += token.length() >= 3 ? 2 : 1;
+            }
+        }
+
+        MemoryCategory category = memory.getCategory();
+        if ((category == MemoryCategory.SCHEDULE || category == MemoryCategory.TODO)
+            && matchesScheduleIntent(query)) {
+            score += 2;
+        }
+        if (category == MemoryCategory.FACT && matchesIdentityIntent(query)) {
+            score += 2;
+        }
+
+        return score;
+    }
+
+    private static boolean matchesScheduleIntent(String query) {
+        return query.matches(".*(今天|明天|后天|大后天|日程|安排|计划|几点|什么时候|待办|记得|行程|约会).*");
+    }
+
+    private static boolean matchesIdentityIntent(String query) {
+        return query.matches(".*(我叫|名字|是谁|称呼|叫我|姓名|介绍).*");
+    }
+
+    private static List<String> tokenize(String text) {
+        List<String> tokens = new ArrayList<>();
+        String[] parts = text.split("\\s+");
+        for (String part : parts) {
+            if (part.isBlank()) {
+                continue;
+            }
+            tokens.add(part);
+            if (part.codePointCount(0, part.length()) > 1) {
+                int[] cps = part.codePoints().toArray();
+                for (int cp : cps) {
+                    tokens.add(new String(Character.toChars(cp)));
+                }
+                for (int i = 0; i < cps.length - 1; i++) {
+                    tokens.add(new String(Character.toChars(cps[i]))
+                        + new String(Character.toChars(cps[i + 1])));
+                }
+            }
+        }
+        return tokens;
     }
 
     public List<UserMemory> listForUser(Long userId, String category) {

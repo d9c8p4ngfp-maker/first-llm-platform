@@ -188,7 +188,8 @@ class RelayServiceImplRagInjectionTest {
         ChannelSelection selection = new ChannelSelection(channel, channelModel);
 
         when(userProfileRepository.findByUserId(anyLong())).thenReturn(Optional.empty());
-        when(userMemoryService.listForUser(anyLong(), any())).thenReturn(List.of());
+        when(userMemoryService.listRelevantForChat(anyLong(), any(), anyInt())).thenReturn(List.of());
+        when(knowledgeBaseService.searchAll(eq(100L), eq("hello"), eq(5))).thenReturn(Optional.empty());
 
         Method method = RelayServiceImpl.class.getDeclaredMethod(
                 "buildPythonChatBody", Long.class, Long.class, ChannelSelection.class,
@@ -199,7 +200,7 @@ class RelayServiceImplRagInjectionTest {
                 relayService, 1L, 100L, selection, upstreamRequest, false);
 
         assertThat(result.ragContext()).isEmpty();
-        verify(knowledgeBaseService, never()).searchAll(anyLong(), any(), anyInt());
+        verify(knowledgeBaseService).searchAll(eq(100L), eq("hello"), eq(5));
     }
 
     @Test
@@ -217,11 +218,11 @@ class RelayServiceImplRagInjectionTest {
         ChannelSelection selection = new ChannelSelection(channel, channelModel);
 
         when(userProfileRepository.findByUserId(anyLong())).thenReturn(Optional.empty());
-        when(userMemoryService.listForUser(anyLong(), any())).thenReturn(List.of());
+        when(userMemoryService.listRelevantForChat(anyLong(), any(), anyInt())).thenReturn(List.of());
 
         RagChunkResult chunk = new RagChunkResult(10L, 1L, "Company policy states...", 0.85,
                 Map.of("title", "Policy Doc"));
-        when(knowledgeBaseService.searchAll(eq(100L), eq("What is our company policy?"), eq(5)))
+        when(knowledgeBaseService.searchByIds(eq(List.of(1L, 2L)), eq("What is our company policy?"), eq(5)))
                 .thenReturn(Optional.of(new RagQueryResponse(List.of(chunk))));
 
         Method method = RelayServiceImpl.class.getDeclaredMethod(
@@ -235,7 +236,7 @@ class RelayServiceImplRagInjectionTest {
         assertThat(result.ragContext()).hasSize(1);
         assertThat(result.ragContext().get(0).documentId()).isEqualTo(10L);
         assertThat(result.ragContext().get(0).score()).isEqualTo(0.85);
-        verify(knowledgeBaseService).searchAll(eq(100L), eq("What is our company policy?"), eq(5));
+        verify(knowledgeBaseService).searchByIds(eq(List.of(1L, 2L)), eq("What is our company policy?"), eq(5));
     }
 
     @Test
@@ -253,9 +254,9 @@ class RelayServiceImplRagInjectionTest {
         ChannelSelection selection = new ChannelSelection(channel, channelModel);
 
         when(userProfileRepository.findByUserId(anyLong())).thenReturn(Optional.empty());
-        when(userMemoryService.listForUser(anyLong(), any())).thenReturn(List.of());
+        when(userMemoryService.listRelevantForChat(anyLong(), any(), anyInt())).thenReturn(List.of());
 
-        when(knowledgeBaseService.searchAll(eq(100L), eq("irrelevant question"), eq(5)))
+        when(knowledgeBaseService.searchByIds(eq(List.of(999L)), eq("irrelevant question"), eq(5)))
                 .thenReturn(Optional.empty());
 
         Method method = RelayServiceImpl.class.getDeclaredMethod(
@@ -286,7 +287,7 @@ class RelayServiceImplRagInjectionTest {
         profile.setAiSystemPrompt("Be helpful and concise.");
         profile.setAiTags("[\"expert\", \"friendly\"]");
         when(userProfileRepository.findByUserId(1L)).thenReturn(Optional.of(profile));
-        when(userMemoryService.listForUser(anyLong(), any())).thenReturn(List.of());
+        when(userMemoryService.listRelevantForChat(anyLong(), any(), anyInt())).thenReturn(List.of());
 
         Method method = RelayServiceImpl.class.getDeclaredMethod(
                 "buildPythonChatBody", Long.class, Long.class, ChannelSelection.class,
