@@ -160,7 +160,7 @@ public class AiServiceClient {
             }).blockLast(Duration.ofMillis(properties.getStreamReadTimeoutMs()));
             return true;
         } catch (Exception ex) {
-            log.warn("AI chat stream failed: {}", ex.getMessage());
+            log.warn("AI chat stream failed: {} ({})", ex.getMessage(), ex.getClass().getSimpleName());
             return false;
         }
     }
@@ -207,9 +207,14 @@ public class AiServiceClient {
 
     public Optional<RagQueryResponse> queryRag(RagQueryRequest request) {
         if (!isRagEnabled()) {
+            log.warn("queryRag skipped: isRagEnabled=false (isEnabled={}, isRag={})",
+                properties.isEnabled(), properties.isRag());
             return Optional.empty();
         }
         try {
+            log.info("queryRag: sending to {}/ai/rag/query, kbIds={}, query={}",
+                properties.getBaseUrl(), request.knowledgeBaseIds(),
+                request.query() != null ? request.query().substring(0, Math.min(50, request.query().length())) : "null");
             RagQueryResponse body = webClient.post()
                 .uri("/ai/rag/query")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -218,9 +223,10 @@ public class AiServiceClient {
                 .retrieve()
                 .bodyToMono(RagQueryResponse.class)
                 .block(Duration.ofMillis(properties.getReadTimeoutMs()));
+            log.info("queryRag: got response with {} chunks", body != null && body.chunks() != null ? body.chunks().size() : 0);
             return Optional.ofNullable(body);
         } catch (Exception ex) {
-            log.warn("AI RAG query failed: {}", ex.getMessage());
+            log.warn("AI RAG query failed: {} ({})", ex.getMessage(), ex.getClass().getSimpleName());
             return Optional.empty();
         }
     }
@@ -279,9 +285,13 @@ public class AiServiceClient {
                 .bodyToMono(CrawlAndIndexResponse.class)
                 .block(Duration.ofMillis(properties.getReadTimeoutMs()));
             return Optional.ofNullable(body);
+        } catch (WebClientResponseException ex) {
+            String detail = ex.getResponseBodyAsString();
+            log.warn("AI crawl-and-index failed: {} {}", ex.getStatusCode(), detail);
+            throw new RuntimeException("crawl failed (" + ex.getStatusCode().value() + "): " + detail);
         } catch (Exception ex) {
             log.warn("AI crawl-and-index failed: {}", ex.getMessage());
-            return Optional.empty();
+            throw new RuntimeException("crawl failed: " + ex.getMessage(), ex);
         }
     }
 

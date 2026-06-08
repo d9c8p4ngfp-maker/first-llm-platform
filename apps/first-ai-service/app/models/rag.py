@@ -17,8 +17,8 @@ class UpstreamConfig(BaseModel):
 class RagIndexRequest(BaseModel):
     document_id: int
     knowledge_base_id: int
-    content: str
-    file_type: str = "TEXT"
+    content: str | None = None
+    file_type: str | None = "TEXT"
     file_path: str | None = None
     chunk_config: ChunkConfig = Field(default_factory=ChunkConfig)
     embedding_model: str = "text-embedding-3-small"

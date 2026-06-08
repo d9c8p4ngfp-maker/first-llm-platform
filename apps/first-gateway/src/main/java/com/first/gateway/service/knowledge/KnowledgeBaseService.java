@@ -22,6 +22,7 @@ import com.first.gateway.repository.ChannelModelRepository;
 import com.first.gateway.repository.ChannelRepository;
 import com.first.gateway.repository.KnowledgeBaseRepository;
 import com.first.gateway.repository.KnowledgeDocumentRepository;
+import com.first.gateway.service.system.SystemConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,9 @@ public class KnowledgeBaseService {
     private final ChannelModelRepository channelModelRepository;
     private final ChannelKeyCrypto channelKeyCrypto;
     private final AsyncTaskRepository asyncTaskRepository;
+    private final SystemConfigService systemConfigService;
+
+    private static final double DEFAULT_SIMILARITY_THRESHOLD = 0.92;
 
     public KnowledgeBaseService(KnowledgeBaseRepository knowledgeBaseRepository,
                                 KnowledgeDocumentRepository knowledgeDocumentRepository,
@@ -57,7 +61,8 @@ public class KnowledgeBaseService {
                                 ChannelRepository channelRepository,
                                 ChannelModelRepository channelModelRepository,
                                 ChannelKeyCrypto channelKeyCrypto,
-                                AsyncTaskRepository asyncTaskRepository) {
+                                AsyncTaskRepository asyncTaskRepository,
+                                SystemConfigService systemConfigService) {
         this.knowledgeBaseRepository = knowledgeBaseRepository;
         this.knowledgeDocumentRepository = knowledgeDocumentRepository;
         this.aiServiceClient = aiServiceClient;
@@ -66,6 +71,16 @@ public class KnowledgeBaseService {
         this.channelModelRepository = channelModelRepository;
         this.channelKeyCrypto = channelKeyCrypto;
         this.asyncTaskRepository = asyncTaskRepository;
+        this.systemConfigService = systemConfigService;
+    }
+
+    private double similarityThreshold() {
+        try {
+            String val = systemConfigService.getString("similarity_threshold", String.valueOf(DEFAULT_SIMILARITY_THRESHOLD));
+            return Double.parseDouble(val);
+        } catch (NumberFormatException e) {
+            return DEFAULT_SIMILARITY_THRESHOLD;
+        }
     }
 
     public List<KnowledgeBase> listByTenant(Long tenantId) {
@@ -231,7 +246,8 @@ public class KnowledgeBaseService {
                 RagQueryRequest ragRequest = new RagQueryRequest(
                     query, List.of(kbId), topK,
                     aiServiceProperties.getEmbeddingModel(),
-                    getEmbeddingUpstream());
+                    getEmbeddingUpstream(),
+                    similarityThreshold());
 
                 var response = aiServiceClient.queryRag(ragRequest);
                 if (response.isPresent() && response.get().chunks() != null
@@ -287,17 +303,28 @@ public class KnowledgeBaseService {
 
     public Optional<RagQueryResponse> searchAll(Long tenantId, String query, int topK) {
         UpstreamConfig upstream = getEmbeddingUpstream();
+        log.info("searchAll: upstream model={}, baseUrl={}", upstream.model(), upstream.baseUrl());
 
         // Stage 1: search user's private KBs
         List<Long> privateKbIds = knowledgeBaseRepository
             .findByTenantIdAndVisibilityAndDeletedAndStatus(tenantId, "PRIVATE", (short) 0, "ACTIVE")
             .stream().map(KnowledgeBase::getId).toList();
+        log.info("searchAll: privateKbIds={}, query={}", privateKbIds, query != null ? query.substring(0, Math.min(50, query.length())) : "null");
 
         List<RagChunkResult> results = new ArrayList<>();
+        double threshold = similarityThreshold();
+        log.info("searchAll: threshold={} (from system config similarity_threshold)", threshold);
         if (!privateKbIds.isEmpty()) {
-            var privateReq = new RagQueryRequest(query, privateKbIds, topK, upstream.model(), upstream);
+            var privateReq = new RagQueryRequest(query, privateKbIds, topK, upstream.model(), upstream, threshold);
+            log.info("searchAll: calling queryRag with kbIds={}, topK={}", privateKbIds, topK);
             aiServiceClient.queryRag(privateReq)
-                .ifPresent(resp -> results.addAll(resp.chunks()));
+                .ifPresent(resp -> {
+                    log.info("searchAll: queryRag returned {} chunks", resp.chunks() != null ? resp.chunks().size() : 0);
+                    results.addAll(resp.chunks());
+                });
+            if (results.isEmpty()) {
+                log.warn("searchAll: queryRag returned no results for private KBs");
+            }
         }
 
         // Stage 2: supplement with public KB if private results insufficient
@@ -311,7 +338,7 @@ public class KnowledgeBaseService {
             if (!publicKbIds.isEmpty()) {
                 int remaining = topK - results.size();
                 int publicTopK = Math.max(remaining, topK / 2);
-                var publicReq = new RagQueryRequest(query, publicKbIds, publicTopK, upstream.model(), upstream);
+                var publicReq = new RagQueryRequest(query, publicKbIds, publicTopK, upstream.model(), upstream, threshold);
                 aiServiceClient.queryRag(publicReq)
                     .ifPresent(resp -> results.addAll(resp.chunks()));
             }
@@ -329,6 +356,24 @@ public class KnowledgeBaseService {
             .toList();
 
         return Optional.of(new RagQueryResponse(merged));
+    }
+
+    public Optional<RagQueryResponse> searchByIds(List<Long> kbIds, String query, int topK) {
+        UpstreamConfig upstream = getEmbeddingUpstream();
+        double threshold = similarityThreshold();
+        log.info("searchByIds: kbIds={}, query={}, threshold={}", kbIds, query != null ? query.substring(0, Math.min(50, query.length())) : "null", threshold);
+
+        var req = new RagQueryRequest(query, kbIds, topK, upstream.model(), upstream, threshold);
+        var resp = aiServiceClient.queryRag(req);
+        if (resp.isEmpty()) {
+            log.warn("searchByIds: queryRag returned empty for kbIds={}", kbIds);
+            return Optional.empty();
+        }
+        var chunks = resp.get().chunks();
+        log.info("searchByIds: got {} chunks for kbIds={}", chunks != null ? chunks.size() : 0, kbIds);
+
+        if (chunks == null || chunks.isEmpty()) return Optional.empty();
+        return Optional.of(new RagQueryResponse(chunks));
     }
 
     @Transactional

@@ -1,7 +1,10 @@
+import logging
 from typing import Any
 
 from app.models.chat import ChatRequest
 from app.services.llm_client import chat_completion_stream, invoke_chat
+
+logger = logging.getLogger(__name__)
 
 
 def _memory_block(memories: list) -> str:
@@ -44,6 +47,11 @@ def assemble_messages(req: ChatRequest) -> list[dict[str, Any]]:
         ]
         if x
     )
+    logger.info("assemble_messages: rag_chunks=%d, memories=%d, profile=%s, extra_len=%d",
+        len(req.rag_context) if req.rag_context else 0,
+        len(req.user_memories) if req.user_memories else 0,
+        req.user_profile is not None,
+        len(extra))
     messages: list[dict[str, Any]] = [m.model_dump() for m in req.messages]
     if not extra:
         return messages
@@ -59,6 +67,10 @@ def assemble_messages(req: ChatRequest) -> list[dict[str, Any]]:
 
 
 def run_chat(req: ChatRequest):
+    logger.info("run_chat: model=%s, stream=%s, rag_context=%d, upstream=%s",
+        req.model, req.stream,
+        len(req.rag_context) if req.rag_context else 0,
+        req.upstream.base_url if req.upstream else "none")
     messages = assemble_messages(req)
     model = req.model or req.upstream.model
     params = req.model_params

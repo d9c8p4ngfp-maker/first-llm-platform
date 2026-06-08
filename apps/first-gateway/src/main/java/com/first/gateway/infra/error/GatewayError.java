@@ -11,7 +11,7 @@ public enum GatewayError {
     INVALID_JWT(HttpStatus.UNAUTHORIZED, "invalid_jwt", "JWT 无效或已过期"),
     TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "token_expired", "令牌已过期"),
     TOKEN_REVOKED(HttpStatus.UNAUTHORIZED, "token_revoked", "令牌已吊销"),
-    INSUFFICIENT_QUOTA(HttpStatus.PAYMENT_REQUIRED, "insufficient_quota", "额度不足"),
+    INSUFFICIENT_QUOTA(HttpStatus.PAYMENT_REQUIRED, "insufficient_quota", "额度不足，请充值"),
     TOKEN_QUOTA_EXCEEDED(HttpStatus.PAYMENT_REQUIRED, "token_quota_exceeded", "令牌额度已用完"),
     MODEL_NOT_ALLOWED(HttpStatus.FORBIDDEN, "model_not_allowed", "令牌不允许使用此模型"),
     IP_NOT_ALLOWED(HttpStatus.FORBIDDEN, "ip_not_allowed", "IP 不在白名单内"),

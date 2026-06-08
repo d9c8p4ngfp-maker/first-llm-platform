@@ -10,6 +10,8 @@ import com.first.gateway.repository.ChannelModelRepository;
 import com.first.gateway.repository.ChannelRepository;
 import com.first.gateway.service.channel.ChannelRpmGuard;
 import com.first.gateway.service.channel.ChannelStatsService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -24,6 +26,8 @@ import java.util.stream.Collectors;
 
 @Component
 public class ChannelSelector {
+
+    private static final Logger log = LoggerFactory.getLogger(ChannelSelector.class);
 
     private final ChannelRepository channelRepository;
     private final ChannelModelRepository channelModelRepository;
@@ -115,15 +119,27 @@ public class ChannelSelector {
     }
 
     private boolean isSelectable(Channel channel) {
-        if (channel == null
-            || channel.getDeleted() != 0
-            || (channel.getStatus() != ChannelStatus.ACTIVE && channel.getStatus() != ChannelStatus.TESTING)) {
+        if (channel == null) {
+            log.warn("Channel not selectable: channel is null");
+            return false;
+        }
+        if (channel.getDeleted() != 0) {
+            log.warn("Channel {} not selectable: deleted={}", channel.getId(), channel.getDeleted());
+            return false;
+        }
+        if (channel.getStatus() != ChannelStatus.ACTIVE && channel.getStatus() != ChannelStatus.TESTING) {
+            log.warn("Channel {} not selectable: status={}", channel.getId(), channel.getStatus());
             return false;
         }
         if (channelCircuitBreaker.isOpen(channel.getId())) {
+            log.warn("Channel {} not selectable: circuit breaker is OPEN, state={}", channel.getId(), channelCircuitBreaker.getState(channel.getId()));
             return false;
         }
-        return channelRpmGuard.isAvailable(channel);
+        if (!channelRpmGuard.isAvailable(channel)) {
+            log.warn("Channel {} not selectable: RPM guard blocked", channel.getId());
+            return false;
+        }
+        return true;
     }
 
     static List<ChannelSelection> orderForRetry(List<ChannelSelection> selections,

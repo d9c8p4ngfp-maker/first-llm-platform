@@ -34,4 +34,8 @@ public interface ChannelService {
     Channel updateFromRequest(Long id, ChannelRequest request);
 
     void delete(Long id);
+
+    Channel cloneForUser(Channel source, Long tenantId, Long userId);
+
+    void disableAllForUser(Long userId);
 }

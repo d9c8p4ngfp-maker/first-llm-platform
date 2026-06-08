@@ -45,7 +45,7 @@ public class DevChannelKeyBootstrap implements ApplicationRunner {
             return;
         }
         channelRepository.findById(channelId).ifPresentOrElse(
-            channel -> updateIfNeeded(channel, plainKey),
+            channel -> updateIfNeeded(channel, plainKey, label),
             () -> log.warn("Channel id={} not found; skip {} API_KEY bootstrap", channelId, label));
     }
 
@@ -83,13 +83,13 @@ public class DevChannelKeyBootstrap implements ApplicationRunner {
         return null;
     }
 
-    private void updateIfNeeded(Channel channel, String plainKey) {
+    private void updateIfNeeded(Channel channel, String plainKey, String label) {
         String encrypted = channelKeyCrypto.encrypt(plainKey);
         if (encrypted.equals(channel.getApiKeyEncrypted())) {
             return;
         }
         channel.setApiKeyEncrypted(encrypted);
         channelRepository.save(channel);
-        log.info("Updated channel '{}' upstream API key from DEEPSEEK_API_KEY", channel.getName());
+        log.info("Updated channel '{}' upstream API key from {}_API_KEY", channel.getName(), label.toUpperCase());
     }
 }

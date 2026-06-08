@@ -20,7 +20,15 @@ public final class ChatEndpointSupport {
             var writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8);
             relayService.chatCompletionsStream(auth, body, tpmReserved, chunk -> {
                 try {
-                    writer.write("data: " + chunk + "\n\n");
+                    String payload = chunk;
+                    if (payload.startsWith("data: ")) {
+                        payload = payload.substring(6);
+                    }
+                    String trimmed = payload.trim();
+                    if (trimmed.isEmpty() || "[DONE]".equals(trimmed)) {
+                        return;
+                    }
+                    writer.write("data: " + payload + "\n\n");
                     writer.flush();
                 } catch (IOException e) {
                     throw new RuntimeException(e);

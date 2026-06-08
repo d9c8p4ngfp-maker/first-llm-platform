@@ -4,6 +4,7 @@ import com.first.gateway.domain.entity.Channel;
 import com.first.gateway.domain.entity.ChannelModel;
 import com.first.gateway.domain.enums.ChannelStatus;
 import com.first.gateway.domain.enums.ModelTier;
+import com.first.gateway.domain.enums.ModelType;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
@@ -214,7 +215,53 @@ public class ChannelServiceImpl implements ChannelService {
 
     @Override
     public List<ChannelModel> listEnabledModels() {
-        return channelModelRepository.findByEnabledOrderByModelNameAsc((short) 1);
+        return channelModelRepository.findByModelTypeEnabled(ModelType.CHAT);
+    }
+
+    @Override
+    @Transactional
+    public Channel cloneForUser(Channel source, Long tenantId, Long userId) {
+        Channel channel = new Channel();
+        channel.setTenantId(tenantId);
+        channel.setUserId(userId);
+        channel.setName(source.getName());
+        channel.setType(source.getType());
+        channel.setProvider(source.getProvider());
+        channel.setBaseUrl(source.getBaseUrl());
+        channel.setApiKeyEncrypted(source.getApiKeyEncrypted());
+        channel.setPriority(source.getPriority());
+        channel.setWeight(source.getWeight());
+        channel.setStatus(source.getStatus());
+        channel.setMaxRpm(source.getMaxRpm());
+        channel.setConfig(source.getConfig());
+        channel = channelRepository.save(channel);
+
+        List<ChannelModel> sourceModels = channelModelRepository.findByChannelIdAndEnabled(source.getId(), (short) 1);
+        for (ChannelModel sm : sourceModels) {
+            ChannelModel model = new ChannelModel();
+            model.setChannelId(channel.getId());
+            model.setModelName(sm.getModelName());
+            model.setModelAlias(sm.getModelAlias());
+            model.setInputRatio(sm.getInputRatio());
+            model.setOutputRatio(sm.getOutputRatio());
+            model.setCacheRatio(sm.getCacheRatio());
+            model.setMaxContext(sm.getMaxContext());
+            model.setTier(sm.getTier());
+            model.setModelType(sm.getModelType());
+            model.setEnabled(sm.getEnabled());
+            channelModelRepository.save(model);
+        }
+        return channel;
+    }
+
+    @Override
+    @Transactional
+    public void disableAllForUser(Long userId) {
+        List<Channel> channels = channelRepository.findByUserIdAndDeletedOrderByPriorityDescWeightDesc(userId, (short) 0);
+        for (Channel channel : channels) {
+            channel.setStatus(ChannelStatus.DISABLED);
+            channelRepository.save(channel);
+        }
     }
 
     private void seedDefaultModelsIfEmpty(Long channelId) {

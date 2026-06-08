@@ -1,6 +1,10 @@
 from typing import Any, Generator
 
 import httpx
+import logging
+import os
+
+logger = logging.getLogger(__name__)
 
 # Shared connection pool - reused across all calls to avoid repeated TCP/TLS handshakes
 _shared_client: httpx.Client | None = None
@@ -12,8 +16,30 @@ def _get_client() -> httpx.Client:
         _shared_client = httpx.Client(
             timeout=httpx.Timeout(300.0, connect=10.0),
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            verify=False,  # Skip SSL verification for compatibility with various API providers
         )
     return _shared_client
+
+
+_PROXY_URL = os.getenv("AI_SERVICE_HTTPS_PROXY", "http://host.docker.internal:8899")
+_proxied_client: httpx.Client | None = None
+
+
+def _get_proxied_client() -> httpx.Client:
+    global _proxied_client
+    if _proxied_client is None:
+        _proxied_client = httpx.Client(
+            timeout=httpx.Timeout(300.0, connect=10.0),
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            verify=False,
+            proxy=_PROXY_URL,
+        )
+    return _proxied_client
+
+
+def _needs_proxy(base_url: str) -> bool:
+    """Check if this host needs to be accessed via the Windows-side proxy."""
+    return "dashscope.aliyuncs.com" in base_url
 
 
 from langchain_openai import ChatOpenAI
@@ -28,7 +54,9 @@ def get_chat_model(
     max_tokens: int = 4000,
     timeout: float = 120.0,
 ) -> ChatOpenAI:
-    url = base_url.rstrip("/") + "/v1"
+    url = base_url.rstrip("/")
+    if not url.endswith("/v1"):
+        url += "/v1"
     return ChatOpenAI(
         model=model,
         openai_api_key=api_key,
@@ -109,7 +137,10 @@ def _chat_completion_raw(
     max_tokens: int = 4000,
     timeout: float = 120.0,
 ) -> dict[str, Any] | None:
-    url = base_url.rstrip("/") + "/v1/chat/completions"
+    url = base_url.rstrip("/")
+    if not url.endswith("/v1"):
+        url += "/v1"
+    url += "/chat/completions"
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
@@ -135,7 +166,10 @@ def chat_completion_stream(
     tools: list[dict[str, Any]] | None = None,
     timeout: float = 300.0,
 ) -> Generator[str, None, None]:
-    url = base_url.rstrip("/") + "/v1/chat/completions"
+    url = base_url.rstrip("/")
+    if not url.endswith("/v1"):
+        url += "/v1"
+    url += "/chat/completions"
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
@@ -167,11 +201,18 @@ def embeddings(
     input_text: str | list[str],
     timeout: float = 60.0,
 ) -> list[list[float]]:
-    url = base_url.rstrip("/") + "/v1/embeddings"
+    url = base_url.rstrip("/")
+    if not url.endswith("/v1"):
+        url += "/v1"
+    url += "/embeddings"
     payload = {"model": model, "input": input_text}
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    client = _get_client()
+    use_proxy = _needs_proxy(base_url)
+    client = _get_proxied_client() if use_proxy else _get_client()
+    logger.info("embeddings: url=%s model=%s api_key=%s... proxy=%s input_count=%s",
+        url, model, api_key[:8], use_proxy, len(input_text) if isinstance(input_text, list) else 1)
     resp = client.post(url, json=payload, headers=headers, timeout=timeout)
+    logger.info("embeddings: status=%s", resp.status_code)
     resp.raise_for_status()
     data = resp.json()
     items = data.get("data") or []

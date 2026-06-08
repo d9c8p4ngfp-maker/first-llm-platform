@@ -10,5 +10,6 @@ public record RagQueryRequest(
     List<Long> knowledgeBaseIds,
     int topK,
     String embeddingModel,
-    UpstreamConfig upstream
+    UpstreamConfig upstream,
+    double scoreThreshold
 ) {}

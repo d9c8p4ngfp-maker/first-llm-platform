@@ -43,7 +43,8 @@ def rag_embed(body: EmbedRequest) -> EmbedResponse:
 async def crawl_and_index_endpoint(req: CrawlAndIndexRequest):
     try:
         result = crawl_and_index(
-            req.url, req.knowledge_base_id, req.document_id, req.upstream
+            req.url, req.knowledge_base_id, req.document_id, req.upstream,
+            req.embedding_model
         )
         return result
     except Exception as exc:

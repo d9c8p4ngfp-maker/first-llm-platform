@@ -1,8 +1,11 @@
 from fastapi import FastAPI, Depends
+import logging
 
 from app.config import settings
 from app.middleware.auth import verify_internal
 from app.routers import chat, health, memory, profile, rag
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(lineno)d: %(message)s')
 
 app = FastAPI(
     title=settings.app_name,

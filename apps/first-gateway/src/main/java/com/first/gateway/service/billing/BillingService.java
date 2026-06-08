@@ -7,6 +7,7 @@ import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
 import com.first.gateway.repository.BillingRetryRepository;
 import com.first.gateway.repository.QuotaRepository;
+import com.first.gateway.service.channel.ChannelService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -22,21 +23,32 @@ public class BillingService {
     private final QuotaRepository quotaRepository;
     private final BillingRecordService billingRecordService;
     private final BillingRetryRepository billingRetryRepository;
+    private final ChannelService channelService;
 
     public BillingService(QuotaRepository quotaRepository,
                           BillingRecordService billingRecordService,
-                          BillingRetryRepository billingRetryRepository) {
+                          BillingRetryRepository billingRetryRepository,
+                          ChannelService channelService) {
         this.quotaRepository = quotaRepository;
         this.billingRecordService = billingRecordService;
         this.billingRetryRepository = billingRetryRepository;
+        this.channelService = channelService;
     }
 
     public void preReserve(Long tenantId, long estimatedTokens) {
+        preReserve(tenantId, null, estimatedTokens);
+    }
+
+    public void preReserve(Long tenantId, Long userId, long estimatedTokens) {
         if (estimatedTokens <= 0) {
             return;
         }
         ensureQuotaExists(tenantId);
         if (quotaRepository.consumeAtomic(tenantId, QUOTA_TYPE, estimatedTokens) == 0) {
+            if (userId != null) {
+                channelService.disableAllForUser(userId);
+                log.warn("quota exhausted for user {}, all channels disabled", userId);
+            }
             throw new GatewayException(GatewayError.INSUFFICIENT_QUOTA);
         }
     }
@@ -64,6 +76,8 @@ public class BillingService {
         ensureQuotaExists(tenantId);
         try {
             if (quotaRepository.consumeAtomic(tenantId, QUOTA_TYPE, tokens) == 0) {
+                channelService.disableAllForUser(userId);
+                log.warn("quota exhausted for user {}, all channels disabled", userId);
                 throw new GatewayException(GatewayError.INSUFFICIENT_QUOTA);
             }
             billingRecordService.record(tenantId, userId, BillingRecordType.CONSUME, -tokens, refLogId, null);
