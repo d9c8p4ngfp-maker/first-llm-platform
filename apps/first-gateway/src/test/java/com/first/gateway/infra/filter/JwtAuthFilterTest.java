@@ -40,15 +40,25 @@ class JwtAuthFilterTest {
     }
 
     @Test
-    void shouldNotFilter_skipsLoginPath() {
+    void loginPath_passesThroughWithoutAuth() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/admin/api/v1/auth/login");
-        assertEquals(true, filter.shouldNotFilter(request));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verify(adminAuthService, never()).authenticate(any());
     }
 
     @Test
-    void shouldNotFilter_skipsWorkspaceLoginPath() {
+    void workspaceLoginPath_passesThroughWithoutAuth() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
-        assertEquals(true, filter.shouldNotFilter(request));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verify(adminAuthService, never()).authenticate(any());
     }
 
     @Test

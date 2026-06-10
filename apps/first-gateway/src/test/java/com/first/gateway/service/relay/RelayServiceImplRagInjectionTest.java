@@ -325,7 +325,7 @@ class RelayServiceImplRagInjectionTest {
             mem.setContent("Memory " + i);
             memories.add(mem);
         }
-        when(userMemoryService.listForUser(anyLong(), any())).thenReturn(memories);
+        when(userMemoryService.listRelevantForChat(anyLong(), any(), anyInt())).thenReturn(memories);
 
         Method method = RelayServiceImpl.class.getDeclaredMethod(
                 "buildPythonChatBody", Long.class, Long.class, ChannelSelection.class,

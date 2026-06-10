@@ -121,9 +121,21 @@ public class RelayServiceImpl implements RelayService {
     }
 
     /**
+     * Thrown when a streaming attempt fails after chunks were already sent to the
+     * client. Retrying another channel would duplicate content, so the fallback
+     * loop must abort immediately. Usage failure is recorded by the thrower.
+     */
+    private static final class StreamAbortedException extends RuntimeException {
+        StreamAbortedException(GatewayException cause) {
+            super(cause);
+        }
+    }
+
+    /**
      * Executes a relay attempt across candidate channels with retry, RPM guard,
      * health tracking, and failure recording. The attempt function should contain
-     * only the API call and success usage recording.
+     * only the API call and success usage recording. Candidates skipped by the
+     * RPM guard do not count as attempts.
      */
     private <T> T executeWithChannelFallback(
             List<ChannelSelection> candidates,
@@ -139,46 +151,47 @@ public class RelayServiceImpl implements RelayService {
         }
 
         GatewayException lastError = null;
-        for (int i = 0; i < candidates.size(); i++) {
-            if (i > 0 && (lastError == null || !retryPolicy.shouldRetry(i, lastError))) {
+        ChannelSelection lastAttempted = null;
+        int attempts = 0;
+        for (ChannelSelection sel : candidates) {
+            if (attempts > 0 && !retryPolicy.shouldRetry(attempts, lastError)) {
                 break;
             }
-            ChannelSelection sel = candidates.get(i);
             if (!channelRpmGuard.acquire(sel.channel())) {
                 continue;
             }
+            attempts++;
+            lastAttempted = sel;
             try {
                 T result = attemptFn.execute(sel);
                 channelHealthTracker.recordSuccess(sel.channel().getId());
                 return result;
+            } catch (StreamAbortedException e) {
+                channelHealthTracker.recordFailure(sel.channel().getId());
+                throw (GatewayException) e.getCause();
             } catch (GatewayException e) {
                 channelHealthTracker.recordFailure(sel.channel().getId());
                 lastError = e;
-                if (!retryPolicy.shouldRetry(i + 1, e)) {
+                if (!retryPolicy.shouldRetry(attempts, e)) {
                     usageRecorder.recordFailure(auth, sel, model, stream, started, e, tpmReserved);
                     throw e;
                 }
             } catch (Exception e) {
                 channelHealthTracker.recordFailure(sel.channel().getId());
                 GatewayException cause = unwrapGatewayException(e);
-                if (cause != null) {
-                    lastError = cause;
-                    if (!retryPolicy.shouldRetry(i + 1, cause)) {
-                        usageRecorder.recordFailure(auth, sel, model, stream, started, cause, tpmReserved);
-                        throw cause;
-                    }
-                } else {
-                    GatewayException wrapped = new GatewayException(GatewayError.INTERNAL_ERROR, e.getMessage());
-                    if (!retryPolicy.shouldRetry(i + 1, wrapped)) {
-                        usageRecorder.recordFailure(auth, sel, model, stream, started, wrapped, tpmReserved);
-                        throw wrapped;
-                    }
-                    lastError = wrapped;
+                GatewayException effective = cause != null
+                    ? cause
+                    : new GatewayException(GatewayError.INTERNAL_ERROR, e.getMessage());
+                lastError = effective;
+                if (!retryPolicy.shouldRetry(attempts, effective)) {
+                    usageRecorder.recordFailure(auth, sel, model, stream, started, effective, tpmReserved);
+                    throw effective;
                 }
             }
         }
         if (lastError != null) {
-            usageRecorder.recordFailure(auth, candidates.getLast(), model, stream, started, lastError, tpmReserved);
+            usageRecorder.recordFailure(auth, lastAttempted != null ? lastAttempted : candidates.getLast(),
+                model, stream, started, lastError, tpmReserved);
             throw lastError;
         }
         throw new GatewayException(GatewayError.NO_AVAILABLE_CHANNEL);
@@ -284,8 +297,9 @@ public class RelayServiceImpl implements RelayService {
                         return null;
                     } catch (GatewayException ex) {
                         if (chunkSent.get()) {
+                            // Chunks already reached the client — never retry another channel.
                             usageRecorder.recordFailure(auth, selection, enhancedModel, true, started, ex, tpmReserved);
-                            throw new RuntimeException(ex);
+                            throw new StreamAbortedException(ex);
                         }
                         throw ex;
                     }

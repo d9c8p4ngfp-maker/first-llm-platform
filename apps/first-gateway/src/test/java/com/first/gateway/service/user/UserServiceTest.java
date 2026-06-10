@@ -79,7 +79,7 @@ class UserServiceTest {
         UserGroup group = group(2L);
         when(userRepository.existsByUsername("alice")).thenReturn(false);
         when(userGroupService.findById(2L)).thenReturn(Optional.of(group));
-        when(passwordEncoder.encode("secret1234567")).thenReturn("encoded");
+        when(passwordEncoder.encode("Secret1234567")).thenReturn("encoded");
         when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> {
             Tenant t = inv.getArgument(0);
             t.setId(100L);
@@ -93,13 +93,13 @@ class UserServiceTest {
         when(systemConfigService.getLong("quota_for_new_user", 100_000L)).thenReturn(100_000L);
         when(quotaRepository.save(any(Quota.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        userService.createUser("alice", "secret1234567", "a@test.com", 2L);
+        userService.createUser("alice", "Secret1234567", "a@test.com", 2L);
 
         verify(tenantRepository).save(any(Tenant.class));
         verify(userRepository).save(any(User.class));
         verify(userTenantRelRepository).save(any(UserTenantRel.class));
         verify(quotaRepository).save(any(Quota.class));
-        verify(passwordEncoder).encode("secret1234567");
+        verify(passwordEncoder).encode("Secret1234567");
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
@@ -112,7 +112,7 @@ class UserServiceTest {
         UserGroup group = group(1L);
         when(userRepository.existsByUsername("bob")).thenReturn(false);
         when(userGroupService.defaultGroup()).thenReturn(group);
-        when(passwordEncoder.encode("secret1234567")).thenReturn("encoded");
+        when(passwordEncoder.encode("Secret1234567")).thenReturn("encoded");
         when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> {
             Tenant t = inv.getArgument(0);
             t.setId(101L);
@@ -126,7 +126,7 @@ class UserServiceTest {
         when(systemConfigService.getLong("quota_for_new_user", 100_000L)).thenReturn(50_000L);
         when(quotaRepository.save(any(Quota.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        userService.createUser("bob", "secret2", null, null);
+        userService.createUser("bob", "Secret1234567", null, null);
 
         verify(userGroupService).defaultGroup();
     }
@@ -143,7 +143,7 @@ class UserServiceTest {
         when(userRepository.existsByUsername("dup")).thenReturn(true);
 
         GatewayException ex = assertThrows(GatewayException.class,
-            () -> userService.createUser("dup", "secret1234567", null, null));
+            () -> userService.createUser("dup", "Secret1234567", null, null));
         assertEquals(GatewayError.INVALID_REQUEST, ex.getError());
     }
 
@@ -153,7 +153,7 @@ class UserServiceTest {
         when(userGroupService.findById(999L)).thenReturn(Optional.empty());
 
         GatewayException ex = assertThrows(GatewayException.class,
-            () -> userService.createUser("carol", "secret1234567", null, 999L));
+            () -> userService.createUser("carol", "Secret1234567", null, 999L));
         assertEquals(GatewayError.INVALID_REQUEST, ex.getError());
     }
 

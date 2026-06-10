@@ -165,7 +165,7 @@ class RelayServiceImplTest {
         Map<String, Object> result = relayService.chatCompletions(authContext, new HashMap<>(request), 0L);
 
         assertEquals(upstreamResponse, result);
-        verify(billingService).preReserve(eq(1L), anyLong());
+        verify(billingService).preReserve(eq(1L), eq(1L), anyLong());
         verify(apiKeyPolicyService).assertModelAllowed(authContext.apiKey(), "deepseek-chat");
         verify(usageRecorder).recordSuccess(
             eq(authContext), eq(selection), eq("deepseek-chat"), eq(false), anyLong(),
@@ -356,7 +356,7 @@ class RelayServiceImplTest {
                 Map.of("model", "deepseek-chat", "messages", List.of()), 0L));
 
         assertEquals(GatewayError.NO_AVAILABLE_CHANNEL, ex.getError());
-        verify(billingService).preReserve(eq(1L), anyLong());
+        verify(billingService).preReserve(eq(1L), eq(1L), anyLong());
         verify(billingService).releaseReserve(eq(1L), anyLong());
     }
 

@@ -5,6 +5,7 @@ import com.first.gateway.domain.enums.ChannelStatus;
 import com.first.gateway.infra.crypto.ChannelKeyCrypto;
 import com.first.gateway.infra.error.GatewayError;
 import com.first.gateway.infra.error.GatewayException;
+import com.first.gateway.infra.security.UpstreamUrlValidator;
 import com.first.gateway.repository.ChannelModelRepository;
 import com.first.gateway.repository.ChannelRepository;
 import com.first.gateway.web.admin.dto.ChannelRequest;
@@ -12,7 +13,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.MockedStatic;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
@@ -55,10 +58,13 @@ class ChannelServiceChannelRequestTest {
             "Test", "OPENAI", "deepseek", "https://api.example.com", "sk-test",
             1, 2, ChannelStatus.ACTIVE, 100, null);
 
-        Channel saved = channelService.createFromRequest(req, 1L);
+        // URL validation requires real DNS resolution — stub it out for unit tests
+        try (MockedStatic<UpstreamUrlValidator> ignored = Mockito.mockStatic(UpstreamUrlValidator.class)) {
+            Channel saved = channelService.createFromRequest(req, 1L);
 
-        assertEquals("enc-sk-test", saved.getApiKeyEncrypted());
-        assertEquals("Test", saved.getName());
+            assertEquals("enc-sk-test", saved.getApiKeyEncrypted());
+            assertEquals("Test", saved.getName());
+        }
         verify(channelKeyCrypto).encrypt("sk-test");
     }
 

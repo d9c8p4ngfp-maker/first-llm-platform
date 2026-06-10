@@ -20,6 +20,7 @@ import com.first.gateway.repository.ChannelModelRepository;
 import com.first.gateway.repository.ChannelRepository;
 import com.first.gateway.repository.KnowledgeBaseRepository;
 import com.first.gateway.repository.KnowledgeDocumentRepository;
+import com.first.gateway.service.system.SystemConfigService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,6 +55,7 @@ class KnowledgeBaseServiceIntegrationTest {
     @Mock private ChannelModelRepository channelModelRepository;
     @Mock private ChannelKeyCrypto channelKeyCrypto;
     @Mock private AsyncTaskRepository asyncTaskRepository;
+    @Mock private SystemConfigService systemConfigService;
 
     @InjectMocks
     private KnowledgeBaseService knowledgeBaseService;
@@ -61,6 +63,8 @@ class KnowledgeBaseServiceIntegrationTest {
     @BeforeEach
     void setUp() {
         when(aiServiceProperties.isRag()).thenReturn(true);
+        when(systemConfigService.getString(any(), any()))
+                .thenAnswer(inv -> inv.getArgument(1));
     }
 
     @Test
