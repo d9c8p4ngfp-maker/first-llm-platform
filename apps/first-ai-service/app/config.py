@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     pg_port: int = 5433
     pg_db: str = "first_rag"
     pg_user: str = "rag"
-    pg_password: str = "changeme"
+    pg_password: str = ""
 
 
 settings = Settings()
