@@ -54,7 +54,7 @@ ai-service:
   rag: ${AI_SERVICE_RAG:true}
   embedding-model: ${AI_SERVICE_EMBEDDING_MODEL:text-embedding-3-small}
   base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
-  internal-token: ${AI_SERVICE_INTERNAL_TOKEN:compose-internal-ai-token-32chars-min}
+  internal-token: ${AI_SERVICE_INTERNAL_TOKEN:}
   connect-timeout-ms: 5000
   read-timeout-ms: 300000
   stream-read-timeout-ms: 300000

@@ -52,7 +52,7 @@ ai-service:
   embedding-model: text-embedding-3-small
   stream-read-timeout-ms: 300000
   base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
-  internal-token: ${AI_SERVICE_INTERNAL_TOKEN:compose-internal-ai-token-32chars-min}
+  internal-token: ${AI_SERVICE_INTERNAL_TOKEN:}
   connect-timeout-ms: 5000
   read-timeout-ms: 120000
   retry:
