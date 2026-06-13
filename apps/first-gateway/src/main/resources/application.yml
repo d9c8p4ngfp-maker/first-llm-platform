@@ -80,7 +80,7 @@ gateway:
     failure-threshold: 5
     open-duration-seconds: 30
   crypto:
-    channel-key-secret: ${CHANNEL_KEY_SECRET:must-change-in-production}
+    channel-key-secret: ${CHANNEL_KEY_SECRET:}
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:*,http://127.0.0.1:*}
   trace:
@@ -88,7 +88,7 @@ gateway:
 
 auth:
   jwt:
-    secret: ${JWT_SECRET:must-change-in-production-use-env-var-32b-min}
+    secret: ${JWT_SECRET:}
     expire-hours: ${JWT_EXPIRE_HOURS:2}
 
 management:

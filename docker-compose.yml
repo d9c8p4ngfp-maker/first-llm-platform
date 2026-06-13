@@ -13,7 +13,7 @@ services:
       - rag-data:/app/data/rag
     environment:
       LOG_LEVEL: ${AI_LOG_LEVEL:-info}
-      AI_SERVICE_INTERNAL_TOKEN: ${AI_SERVICE_INTERNAL_TOKEN:-compose-internal-ai-token-32chars-min}
+      AI_SERVICE_INTERNAL_TOKEN: ${AI_SERVICE_INTERNAL_TOKEN}
       RAG_DATA_DIR: /app/data/rag
       PG_HOST: pgvector
       PG_PORT: "5432"
@@ -70,7 +70,7 @@ services:
       CHANNEL_KEY_SECRET: ${CHANNEL_KEY_SECRET}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       BAILIAN_API_KEY: ${BAILIAN_API_KEY}
-      AI_SERVICE_INTERNAL_TOKEN: ${AI_SERVICE_INTERNAL_TOKEN:-compose-internal-ai-token-32chars-min}
+      AI_SERVICE_INTERNAL_TOKEN: ${AI_SERVICE_INTERNAL_TOKEN}
       AI_SERVICE_BASE_URL: http://first-ai-service:8000
       AI_SERVICE_ENABLED: "true"
       AI_SERVICE_CHAT: "true"
