@@ -76,7 +76,7 @@ services:
       POSTGRES_USER: rag
       POSTGRES_PASSWORD: ${PG_PASSWORD}
     volumes:
-      - D:/first/_local/data/pgvector:/var/lib/postgresql/data
+      - ./_local/data/pgvector:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rag -d first_rag"]
       interval: 10s
@@ -136,7 +136,7 @@ services:
     expose:
       - "6379"
     volumes:
-      - D:/first/_local/data/redis:/data
+      - ./_local/data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -158,7 +158,7 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
-      - D:/first/_local/data/mysql:/var/lib/mysql
+      - ./_local/data/mysql:/var/lib/mysql
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
