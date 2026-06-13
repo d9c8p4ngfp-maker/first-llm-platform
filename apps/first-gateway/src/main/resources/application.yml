@@ -82,7 +82,7 @@ gateway:
   crypto:
     channel-key-secret: ${CHANNEL_KEY_SECRET:}
   cors:
-    allowed-origins: ${CORS_ORIGINS:http://localhost:*,http://127.0.0.1:*}
+    allowed-origins: ${CORS_ORIGINS:https://openfirst.cn,http://localhost:5173}
   trace:
     header-name: X-Request-Id
 

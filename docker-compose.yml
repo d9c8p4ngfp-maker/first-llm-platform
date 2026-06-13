@@ -1,8 +1,43 @@
 volumes:
   shared-uploads:
   rag-data:
+  caddy-data:
+  caddy-config:
 
 services:
+  # ==================== HTTPS 入口 ====================
+  caddy:
+    image: caddy:2-alpine
+    container_name: first-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      DOMAIN: ${DOMAIN:-openfirst.cn}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-admin@openfirst.cn}
+    depends_on:
+      frontend:
+        condition: service_started
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ==================== React 前端 ====================
+  frontend:
+    build: ./apps/first-gateway-web
+    container_name: first-frontend
+    expose:
+      - "80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ==================== AI 边车 ====================
   first-ai-service:
     build: ./apps/first-ai-service
     container_name: first-ai-service
@@ -77,6 +112,7 @@ services:
       AI_SERVICE_MEMORY_EXTRACTION: "true"
       AI_SERVICE_PROFILE_SYNTHESIS: "true"
       AI_SERVICE_RAG: "true"
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://openfirst.cn}
     depends_on:
       mysql:
         condition: service_healthy
